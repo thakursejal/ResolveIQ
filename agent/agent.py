@@ -3,7 +3,7 @@ import os
 from groq import Groq
 from dotenv import load_dotenv
 
-from .decision import analyze_escalation
+from .decision import analyze_escalation, get_escalation_action
 from .prompts import SYSTEM_PROMPT, build_agent_prompt
 
 
@@ -58,28 +58,35 @@ def run_agent(ticket, historical_cases):
         )
 
         return {
-            **decision,
-            "agent": "ResolveIQ",
-            "status": "success",
-            "prompt_version": "v3",
-            "ai_reasoning": ai_reasoning
-        }
+    **decision,
+    "escalation_action": action,
+    "agent": "ResolveIQ",
+    "status": "success",
+    "prompt_version": "v3",
+    "ai_reasoning": ai_reasoning
+}
+   except Exception as error:
+    # Fallback to the rule-based decision engine
+    decision = analyze_escalation(
+        ticket,
+        historical_cases
+    )
 
-    except Exception as error:
-        # Fallback to the rule-based decision engine
-        decision = analyze_escalation(
-            ticket,
-            historical_cases
-        )
+    action = get_escalation_action(
+        decision["severity"],
+        decision["recurring_issue"],
+        decision["previous_failed_attempts"]
+    )
 
-        return {
-            **decision,
-            "agent": "ResolveIQ",
-            "status": "fallback",
-            "prompt_version": "v3",
-            "ai_reasoning": (
-                "LLM unavailable. "
-                "ResolveIQ used its structured escalation logic."
-            ),
-            "error": str(error)
-        }
+    return {
+        **decision,
+        "escalation_action": action,
+        "agent": "ResolveIQ",
+        "status": "fallback",
+        "prompt_version": "v3",
+        "ai_reasoning": (
+            "LLM unavailable. "
+            "ResolveIQ used its structured escalation logic."
+        ),
+        "error": str(error)
+    }
