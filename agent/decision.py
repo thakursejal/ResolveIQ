@@ -114,3 +114,27 @@ def analyze_escalation(ticket, historical_cases):
         "recommendation": recommendation,
         "reason": reason
     }
+    def get_escalation_action(severity, recurring_issue, failed_attempts):
+    """
+    Convert the analysis into a clear operational action.
+    """
+
+    if recurring_issue and len(failed_attempts) >= 2:
+        return {
+            "action": "ESCALATE",
+            "team": "Payment Operations",
+            "priority": "HIGH"
+        }
+
+    if severity == "high":
+        return {
+            "action": "REVIEW",
+            "team": "Support Lead",
+            "priority": "HIGH"
+        }
+
+    return {
+        "action": "TROUBLESHOOT",
+        "team": "Customer Support",
+        "priority": "NORMAL"
+    }
