@@ -1,2 +1,9 @@
+streamlit
+requests
 groq
 python-dotenv
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+hindsight-client
