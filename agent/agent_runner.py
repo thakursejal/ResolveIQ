@@ -1,5 +1,8 @@
 from .agent import run_agent
-from .decision import analyze_hindsight_memories, get_escalation_action
+from .decision import (
+    analyze_hindsight_memories,
+    get_escalation_action
+)
 from .memory_parser import prepare_historical_context
 from .output_schema import validate_agent_output
 
@@ -28,39 +31,39 @@ def run_agent_with_memory(ticket, recall_historical_cases):
         issue=ticket.get("issue", ""),
         description=ticket.get("description", "")
     )
-    
-    if memory_records is None:
-    memory_records = []
 
-    # 2. Prepare Hindsight memories for the AI agent
+    if memory_records is None:
+        memory_records = []
+
+    # 2. Prepare Hindsight memories
     historical_context = prepare_historical_context(
         memory_records
     )
 
-    # 3. Analyze the recalled memories
+    # 3. Analyze historical evidence
     memory_analysis = analyze_hindsight_memories(
         ticket,
         historical_context
     )
 
-    # 4. Run the AI reasoning layer
+    # 4. Run AI reasoning
     ai_result = run_agent(
         ticket,
         historical_context
     )
 
-    # 5. Determine operational action from memory evidence
-   action = get_escalation_action(
-    "high"
-    if (
-        memory_analysis["recurring_issue"]
-        and len(memory_analysis["failed_attempts"]) >= 2
+    # 5. Determine operational action
+    action = get_escalation_action(
+        "high"
+        if (
+            memory_analysis["recurring_issue"]
+            and len(memory_analysis["failed_attempts"]) >= 2
+        )
+        else ai_result.get("severity", "medium"),
+        memory_analysis["recurring_issue"],
+        memory_analysis["failed_attempts"],
+        memory_analysis["previous_escalations"]
     )
-    else ai_result.get("severity", "medium"),
-    memory_analysis["recurring_issue"],
-    memory_analysis["failed_attempts"],
-    memory_analysis["previous_escalations"]
-)
 
     # 6. Determine final severity
     severity = (
@@ -69,19 +72,19 @@ def run_agent_with_memory(ticket, recall_historical_cases):
         else "medium"
     )
 
-    # 7. Build a consistent recommendation
-  if action["action"] == "ESCALATE":
+    # 7. Build recommendation
+    if action["action"] == "ESCALATE":
 
-    recommendation = (
-        f"Escalate to {action['team']}"
-    )
+        recommendation = (
+            f"Escalate to {action['team']}"
+        )
 
-    reason = (
-        "Hindsight recalled a recurring issue with "
-        f"{len(memory_analysis['failed_attempts'])} "
-        "unsuccessful troubleshooting attempts. "
-        "Repeating the same failed approach is not recommended."
-    )
+        reason = (
+            "Hindsight recalled a recurring issue with "
+            f"{len(memory_analysis['failed_attempts'])} "
+            "unsuccessful troubleshooting attempts. "
+            "Repeating the same failed approach is not recommended."
+        )
 
     elif memory_analysis["successful_resolutions"]:
 
@@ -105,7 +108,7 @@ def run_agent_with_memory(ticket, recall_historical_cases):
             "of repeated failure to justify escalation."
         )
 
-    # 8. Construct final agent result
+    # 8. Construct final result
     result = {
         "agent": "ResolveIQ",
         "status": ai_result.get("status", "success"),
@@ -123,12 +126,12 @@ def run_agent_with_memory(ticket, recall_historical_cases):
         "escalation_action": action,
         "memory_count": memory_analysis["memory_count"],
         "learning_signal": (
-    "Repeated failures detected from historical cases."
-    if len(memory_analysis["failed_attempts"]) >= 2
-    else
-    "Previous experience recalled, but repeated failure "
-    "was not established."
-),
+            "Repeated failures detected from historical cases."
+            if len(memory_analysis["failed_attempts"]) >= 2
+            else
+            "Previous experience recalled, but repeated failure "
+            "was not established."
+        ),
         "recommendation": recommendation,
         "reason": reason,
         "ai_reasoning": ai_result.get(
@@ -137,7 +140,7 @@ def run_agent_with_memory(ticket, recall_historical_cases):
         )
     }
 
-    # 9. Validate final output structure
+    # 9. Validate final output
     validation = validate_agent_output(result)
 
     result["output_valid"] = validation["valid"]
