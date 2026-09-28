@@ -1,24 +1,8 @@
 import os
-
 import requests
 import streamlit as st
 
 from agent.agent_runner import run_agent_with_memory
-
-
-# ============================================================
-# CONFIG
-# ============================================================
-
-HINDSIGHT_URL = os.getenv(
-    "HINDSIGHT_URL",
-    "http://localhost:8888"
-)
-
-BANK_ID = os.getenv(
-    "HINDSIGHT_BANK_ID",
-    "ResolveIQ"
-)
 
 
 # ============================================================
@@ -34,112 +18,375 @@ st.set_page_config(
 
 
 # ============================================================
-# STYLING
+# CONFIG — HINDSIGHT CLOUD
+# ============================================================
+
+def get_secret(name, default=""):
+    """
+    Read a value from Streamlit Secrets first,
+    then fall back to environment variables.
+    """
+    try:
+        if name in st.secrets:
+            return st.secrets[name]
+    except Exception:
+        pass
+
+    return os.getenv(name, default)
+
+
+HINDSIGHT_BASE_URL = get_secret(
+    "HINDSIGHT_BASE_URL",
+    "https://api.hindsight.vectorize.io",
+)
+
+HINDSIGHT_API_KEY = get_secret(
+    "HINDSIGHT_API_KEY",
+    "",
+)
+
+BANK_ID = get_secret(
+    "HINDSIGHT_BANK_ID",
+    "ResolveIQ",
+)
+
+
+# ============================================================
+# HINDSIGHT API HELPERS
+# ============================================================
+
+def hindsight_headers():
+    """
+    Authentication headers for Hindsight Cloud.
+    """
+    return {
+        "Authorization": f"Bearer {HINDSIGHT_API_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+
+def recall_memories(query):
+    """
+    Recall relevant organizational memories from Hindsight.
+    """
+
+    if not HINDSIGHT_API_KEY:
+        raise RuntimeError(
+            "HINDSIGHT_API_KEY is missing from Streamlit Secrets."
+        )
+
+    url = (
+        f"{HINDSIGHT_BASE_URL}"
+        f"/v1/default/banks/{BANK_ID}/memories/recall"
+    )
+
+    response = requests.post(
+        url,
+        headers=hindsight_headers(),
+        json={
+            "query": query
+        },
+        timeout=30,
+    )
+
+    response.raise_for_status()
+
+    return response.json()
+
+
+def save_memory(memory):
+    """
+    Store a new organizational memory in Hindsight.
+    """
+
+    if not HINDSIGHT_API_KEY:
+        raise RuntimeError(
+            "HINDSIGHT_API_KEY is missing from Streamlit Secrets."
+        )
+
+    url = (
+        f"{HINDSIGHT_BASE_URL}"
+        f"/v1/default/banks/{BANK_ID}/memories"
+    )
+
+    body = {
+        "items": [
+            {
+                "content": memory
+            }
+        ],
+        "async": True,
+    }
+
+    response = requests.post(
+        url,
+        headers=hindsight_headers(),
+        json=body,
+        timeout=20,
+    )
+
+    response.raise_for_status()
+
+    return response.json()
+
+
+# ============================================================
+# CUSTOM STYLING
 # ============================================================
 
 st.markdown(
     """
     <style>
 
+    /* ---------- GLOBAL ---------- */
+
+    .stApp {
+        background: #f5f7fb;
+        color: #172033;
+    }
+
     [data-testid="stAppViewContainer"] {
-        background: #f7f8fc;
+        background: #f5f7fb;
     }
 
     .block-container {
-        max-width: 1150px;
+        max-width: 1180px;
         padding-top: 2rem;
-        padding-bottom: 3rem;
+        padding-bottom: 4rem;
     }
 
+    /* ---------- TEXT VISIBILITY ---------- */
+
+    p,
+    label,
+    .stMarkdown,
+    .stText,
+    .stCaption,
+    div[data-testid="stMetricLabel"] {
+        color: #172033;
+    }
+
+    /* ---------- HERO ---------- */
+
     .hero {
-        background: white;
-        border: 1px solid #e5e7eb;
-        border-radius: 20px;
-        padding: 30px 34px;
-        margin-bottom: 24px;
+        background: linear-gradient(
+            135deg,
+            #ffffff 0%,
+            #f8f1ff 100%
+        );
+
+        border: 1px solid #e4d8f2;
+        border-radius: 24px;
+
+        padding: 32px 36px;
+        margin-bottom: 30px;
+
+        box-shadow:
+            0 10px 30px rgba(40, 20, 70, 0.08);
     }
 
     .hero-title {
+        color: #171321;
         font-size: 42px;
-        font-weight: 800;
+        font-weight: 850;
+        letter-spacing: -1px;
         margin: 0;
     }
 
     .hero-subtitle {
-        color: #6b7280;
+        color: #5d6070;
         font-size: 17px;
         margin-top: 8px;
     }
 
-    .section-title {
-        font-size: 24px;
-        font-weight: 750;
-        margin-top: 25px;
-        margin-bottom: 12px;
+    .hero-flow {
+        margin-top: 18px;
+        color: #7b3fe4;
+        font-size: 14px;
+        font-weight: 700;
     }
 
+    /* ---------- SECTION TITLES ---------- */
+
+    .section-title {
+        color: #171321;
+        font-size: 24px;
+        font-weight: 800;
+        margin-top: 28px;
+        margin-bottom: 14px;
+    }
+
+    /* ---------- CARDS ---------- */
+
     .result-card {
-        background: white;
-        border: 1px solid #e5e7eb;
+        background: #ffffff;
+        color: #172033;
+
+        border: 1px solid #e1e5ed;
         border-radius: 16px;
+
         padding: 22px;
         margin: 10px 0;
+
+        box-shadow:
+            0 5px 18px rgba(30, 40, 60, 0.05);
+    }
+
+    .result-card b {
+        color: #171321;
     }
 
     .danger-card {
-        background: #fff5f5;
-        border: 1px solid #fecaca;
-        border-radius: 16px;
+        background: #fff4f4;
+        color: #541313;
+
+        border: 1px solid #f4bcbc;
+        border-radius: 18px;
+
         padding: 24px;
         margin: 12px 0;
+
+        box-shadow:
+            0 6px 18px rgba(150, 20, 20, 0.06);
+    }
+
+    .danger-card div {
+        color: #541313;
     }
 
     .success-card {
-        background: #f0fdf4;
-        border: 1px solid #bbf7d0;
-        border-radius: 16px;
+        background: #f0fbf4;
+        color: #124b28;
+
+        border: 1px solid #bce8c9;
+        border-radius: 18px;
+
         padding: 24px;
         margin: 12px 0;
+
+        box-shadow:
+            0 6px 18px rgba(20, 120, 60, 0.05);
+    }
+
+    .success-card div {
+        color: #124b28;
     }
 
     .recommendation-title {
         font-size: 25px;
-        font-weight: 800;
+        font-weight: 850;
         margin-bottom: 8px;
     }
 
     .small-label {
-        color: #6b7280;
-        font-size: 13px;
-        font-weight: 600;
+        color: #687083;
+        font-size: 12px;
+        font-weight: 750;
         text-transform: uppercase;
-        letter-spacing: 0.04em;
+        letter-spacing: 0.06em;
     }
 
     .team-name {
+        color: #171321;
         font-size: 21px;
-        font-weight: 750;
-        margin-top: 5px;
+        font-weight: 800;
+        margin-top: 6px;
     }
+
+    /* ---------- METRICS ---------- */
 
     [data-testid="stMetric"] {
-        background: white;
-        border: 1px solid #e5e7eb;
-        border-radius: 14px;
-        padding: 15px;
+        background: #ffffff;
+
+        border: 1px solid #e1e5ed;
+        border-radius: 16px;
+
+        padding: 18px;
+
+        box-shadow:
+            0 5px 18px rgba(30, 40, 60, 0.05);
     }
 
-    .stButton > button {
-        border-radius: 10px;
-        height: 46px;
-        font-weight: 700;
+    [data-testid="stMetricLabel"] {
+        color: #687083 !important;
     }
+
+    [data-testid="stMetricValue"] {
+        color: #171321 !important;
+        font-weight: 800;
+    }
+
+    /* ---------- INPUTS ---------- */
+
+    div[data-baseweb="input"] > div,
+    div[data-baseweb="textarea"] {
+        background: #ffffff;
+        border-radius: 10px;
+    }
+
+    input,
+    textarea {
+        color: #171321 !important;
+        background: #ffffff !important;
+    }
+
+    /* ---------- BUTTON ---------- */
+
+    .stButton > button {
+        border-radius: 12px;
+        min-height: 48px;
+
+        font-weight: 800;
+        font-size: 15px;
+
+        border: 1px solid #d8dce5;
+    }
+
+    /* ---------- EXPANDERS ---------- */
+
+    div[data-testid="stExpander"] {
+        background: #ffffff;
+        border: 1px solid #e1e5ed;
+        border-radius: 14px;
+        margin-bottom: 10px;
+    }
+
+    /* ---------- FOOTER ---------- */
 
     .footer {
         text-align: center;
-        color: #9ca3af;
+        color: #7c8392;
+
         font-size: 13px;
-        margin-top: 40px;
+        margin-top: 45px;
+
+        padding-top: 20px;
+        border-top: 1px solid #e1e5ed;
+    }
+
+    /* ---------- STATUS ---------- */
+
+    .status-card {
+        background: #ffffff;
+        border: 1px solid #e1e5ed;
+        border-radius: 14px;
+        padding: 14px 18px;
+        margin-bottom: 20px;
+    }
+
+    .status-label {
+        color: #687083;
+        font-size: 12px;
+        font-weight: 750;
+        text-transform: uppercase;
+    }
+
+    .status-value {
+        color: #171321;
+        font-size: 15px;
+        font-weight: 750;
+        margin-top: 3px;
     }
 
     </style>
@@ -155,14 +402,53 @@ st.markdown(
 st.markdown(
     """
     <div class="hero">
-        <div class="hero-title">🧠 ResolveIQ</div>
+
+        <div class="hero-title">
+            🧠 ResolveIQ
+        </div>
+
         <div class="hero-subtitle">
             Escalation Intelligence powered by organizational memory
         </div>
+
+        <div class="hero-flow">
+            Remember → Recall → Decide → Resolve → Learn
+        </div>
+
     </div>
     """,
     unsafe_allow_html=True,
 )
+
+
+# ============================================================
+# CONNECTION STATUS
+# ============================================================
+
+if HINDSIGHT_API_KEY:
+
+    st.markdown(
+        """
+        <div class="status-card">
+
+            <div class="status-label">
+                Hindsight Memory
+            </div>
+
+            <div class="status-value">
+                🟢 Connected to Hindsight Cloud
+            </div>
+
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+else:
+
+    st.warning(
+        "Hindsight API key is not configured in Streamlit Secrets."
+    )
 
 
 # ============================================================
@@ -174,29 +460,37 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+
 col1, col2 = st.columns(2)
 
+
 with col1:
+
     customer_id = st.text_input(
         "Customer ID",
         value="C205",
     )
 
+
 with col2:
+
     issue = st.text_input(
         "Issue",
         value="Payment failed",
     )
 
+
 description = st.text_area(
     "Customer description",
-    value="Customer says their payment has failed multiple times.",
-    height=100,
+    value=(
+        "Customer says their payment has failed multiple times."
+    ),
+    height=110,
 )
 
 
 # ============================================================
-# ANALYZE CASE
+# ANALYZE BUTTON
 # ============================================================
 
 analyze = st.button(
@@ -206,11 +500,11 @@ analyze = st.button(
 )
 
 
-if analyze:
+# ============================================================
+# ANALYZE CASE
+# ============================================================
 
-    # ========================================================
-    # BUILD HINDSIGHT QUERY
-    # ========================================================
+if analyze:
 
     query = f"""
 Customer ID: {customer_id}
@@ -235,44 +529,67 @@ Use the historical memory to help decide whether this case
 should be escalated or continue troubleshooting.
 """
 
-    # ========================================================
-    # RECALL HINDSIGHT MEMORY
-    # ========================================================
-
-    with st.spinner("🧠 Recalling organizational memory..."):
+    with st.spinner(
+        "🧠 Recalling organizational memory..."
+    ):
 
         try:
 
-            response = requests.post(
-                f"{HINDSIGHT_URL}/v1/default/banks/"
-                f"{BANK_ID}/memories/recall",
-                json={
-                    "query": query
-                },
-                timeout=30,
+            data = recall_memories(query)
+
+        except requests.exceptions.HTTPError as error:
+
+            status_code = (
+                error.response.status_code
+                if error.response is not None
+                else "unknown"
             )
 
-            response.raise_for_status()
+            st.error(
+                f"Hindsight request failed "
+                f"(HTTP {status_code})."
+            )
 
-            data = response.json()
+            if status_code == 401:
+
+                st.info(
+                    "Your Hindsight API key is invalid, "
+                    "expired, or not authorized."
+                )
+
+            elif status_code == 404:
+
+                st.info(
+                    f"The Hindsight bank '{BANK_ID}' "
+                    "was not found."
+                )
+
+            elif status_code == 402:
+
+                st.info(
+                    "Hindsight reports insufficient credits."
+                )
+
+            st.stop()
 
         except Exception as error:
 
             st.error(
-                f"Could not connect to Hindsight: {error}"
+                f"Could not connect to Hindsight Cloud: {error}"
             )
 
             st.stop()
 
 
     # ========================================================
-    # EXTRACT RECALL RESULTS
+    # EXTRACT MEMORY RESULTS
     # ========================================================
 
     results = data.get(
         "results",
         []
     )
+
 
     memory_texts = []
 
@@ -310,34 +627,18 @@ should be escalated or continue troubleshooting.
     def recall_historical_cases(
         customer_id,
         issue,
-        description
+        description,
     ):
         """
-        Return the Hindsight memories already
-        recalled for this case.
+        Return the memories already recalled from Hindsight.
         """
-
         return results
 
 
-    with st.spinner(
-        "🤖 ResolveIQ is reasoning from historical experience..."
-    ):
-
-        try:
-
-            agent_result = run_agent_with_memory(
-                ticket,
-                recall_historical_cases
-            )
-
-        except Exception as error:
-
-            st.error(
-                f"ResolveIQ agent error: {error}"
-            )
-
-            st.stop()
+    agent_result = run_agent_with_memory(
+        ticket,
+        recall_historical_cases,
+    )
 
 
     # ========================================================
@@ -346,27 +647,17 @@ should be escalated or continue troubleshooting.
 
     action = agent_result.get(
         "escalation_action",
-        {}
+        {},
     )
 
     recurring_issue = agent_result.get(
         "recurring_issue",
-        False
+        False,
     )
 
     failed_attempts = agent_result.get(
         "previous_failed_attempts",
-        []
-    )
-
-    previous_escalations = agent_result.get(
-        "previous_escalations",
-        []
-    )
-
-    successful_resolutions = agent_result.get(
-        "successful_resolutions",
-        []
+        [],
     )
 
     previous_failure = (
@@ -379,7 +670,7 @@ should be escalated or continue troubleshooting.
 
     recommended_team = action.get(
         "team",
-        "Customer Support"
+        "Customer Support",
     )
 
     gateway_fix = (
@@ -389,7 +680,100 @@ should be escalated or continue troubleshooting.
 
 
     # ========================================================
-    # CASE SUMMARY
+    # SAVE ANALYSIS TO SESSION STATE
+    # ========================================================
+
+    st.session_state["analysis_complete"] = True
+
+    st.session_state["results"] = results
+
+    st.session_state["memory_texts"] = memory_texts
+
+    st.session_state["agent_result"] = agent_result
+
+    st.session_state["action"] = action
+
+    st.session_state["recurring_issue"] = recurring_issue
+
+    st.session_state["failed_attempts"] = failed_attempts
+
+    st.session_state["previous_failure"] = previous_failure
+
+    st.session_state["escalate"] = escalate
+
+    st.session_state["recommended_team"] = recommended_team
+
+    st.session_state["gateway_fix"] = gateway_fix
+
+    st.session_state["customer_id"] = customer_id
+
+    st.session_state["issue"] = issue
+
+    st.session_state["description"] = description
+
+
+# ============================================================
+# DISPLAY ANALYSIS
+# ============================================================
+
+if st.session_state.get(
+    "analysis_complete",
+    False,
+):
+
+    results = st.session_state.get(
+        "results",
+        [],
+    )
+
+    memory_texts = st.session_state.get(
+        "memory_texts",
+        [],
+    )
+
+    agent_result = st.session_state.get(
+        "agent_result",
+        {},
+    )
+
+    action = st.session_state.get(
+        "action",
+        {},
+    )
+
+    recurring_issue = st.session_state.get(
+        "recurring_issue",
+        False,
+    )
+
+    failed_attempts = st.session_state.get(
+        "failed_attempts",
+        [],
+    )
+
+    previous_failure = st.session_state.get(
+        "previous_failure",
+        False,
+    )
+
+    escalate = st.session_state.get(
+        "escalate",
+        False,
+    )
+
+    recommended_team = st.session_state.get(
+        "recommended_team",
+        "Customer Support",
+    )
+
+    gateway_fix = st.session_state.get(
+        "gateway_fix",
+        False,
+    )
+
+
+    # ========================================================
+    # CASE ANALYSIS
     # ========================================================
 
     st.divider()
@@ -399,27 +783,44 @@ should be escalated or continue troubleshooting.
         unsafe_allow_html=True,
     )
 
-    metric1, metric2, metric3 = st.columns(3)
+
+    metric1, metric2, metric3, metric4 = st.columns(4)
+
 
     with metric1:
 
         st.metric(
-            "Historical matches",
+            "Historical Matches",
             len(results),
         )
+
 
     with metric2:
 
         st.metric(
-            "Recurring issue",
+            "Recurring Issue",
             "Yes" if recurring_issue else "No",
         )
+
 
     with metric3:
 
         st.metric(
-            "Previous failures",
+            "Failed Attempts",
             len(failed_attempts),
+        )
+
+
+    with metric4:
+
+        st.metric(
+            "Previous Escalations",
+            len(
+                agent_result.get(
+                    "previous_escalations",
+                    [],
+                )
+            ),
         )
 
 
@@ -436,28 +837,33 @@ should be escalated or continue troubleshooting.
     if escalate:
 
         st.markdown(
-            """
+            f"""
             <div class="danger-card">
+
                 <div class="recommendation-title">
                     🔴 ESCALATION RECOMMENDED
                 </div>
 
                 <div>
-                    ResolveIQ found historical evidence of
-                    repeated troubleshooting failure.
+                    ResolveIQ recalled historical evidence
+                    of repeated unsuccessful troubleshooting.
                 </div>
+
             </div>
             """,
             unsafe_allow_html=True,
         )
 
+
         team_col, signal_col = st.columns(2)
+
 
         with team_col:
 
             st.markdown(
                 f"""
                 <div class="result-card">
+
                     <div class="small-label">
                         Recommended Team
                     </div>
@@ -465,6 +871,7 @@ should be escalated or continue troubleshooting.
                     <div class="team-name">
                         🏢 {recommended_team}
                     </div>
+
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -476,6 +883,7 @@ should be escalated or continue troubleshooting.
             st.markdown(
                 """
                 <div class="result-card">
+
                     <div class="small-label">
                         Memory Signal
                     </div>
@@ -483,6 +891,7 @@ should be escalated or continue troubleshooting.
                     <div class="team-name">
                         🔁 Recurring failure
                     </div>
+
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -497,19 +906,22 @@ should be escalated or continue troubleshooting.
                 "gateway configuration."
             )
 
+
     else:
 
         st.markdown(
             """
             <div class="success-card">
+
                 <div class="recommendation-title">
                     🟢 CONTINUE TROUBLESHOOTING
                 </div>
 
                 <div>
-                    No strong historical escalation signal
-                    was found.
+                    Hindsight did not provide enough
+                    historical evidence to justify escalation.
                 </div>
+
             </div>
             """,
             unsafe_allow_html=True,
@@ -560,15 +972,21 @@ should be escalated or continue troubleshooting.
         unsafe_allow_html=True,
     )
 
+
     ai_reasoning = agent_result.get(
         "ai_reasoning",
-        "No AI reasoning was returned."
+        "No AI reasoning was returned.",
     )
+
 
     st.markdown(
         f"""
         <div class="result-card">
-            {ai_reasoning}
+
+            <div>
+                {ai_reasoning}
+            </div>
+
         </div>
         """,
         unsafe_allow_html=True,
@@ -579,15 +997,17 @@ should be escalated or continue troubleshooting.
     # LEARNING SIGNAL
     # ========================================================
 
+    learning_signal = agent_result.get(
+        "learning_signal",
+        "No learning signal available.",
+    )
+
+
     st.markdown(
         '<div class="section-title">📚 Learning Signal</div>',
         unsafe_allow_html=True,
     )
 
-    learning_signal = agent_result.get(
-        "learning_signal",
-        "No learning signal available."
-    )
 
     st.info(
         learning_signal
@@ -612,34 +1032,28 @@ should be escalated or continue troubleshooting.
             f"""
             <div class="result-card">
 
-            <b>ResolveIQ connected the current case
-            with organizational memory:</b>
+                <b>ResolveIQ connected the current case
+                with organizational memory.</b>
 
-            <br><br>
+                <br><br>
 
-            1. 🔁 Similar payment-related cases
-            were found in historical memory.
+                🔁 Recurring issue detected:
+                <b>{recurring_issue}</b>
 
-            <br><br>
+                <br><br>
 
-            2. ❌ Historical failed attempts:
-            {len(failed_attempts)}
+                ❌ Historical failed attempts:
+                <b>{len(failed_attempts)}</b>
 
-            <br><br>
+                <br><br>
 
-            3. 🏢 Previous escalations:
-            {len(previous_escalations)}
+                🏢 Recommended team:
+                <b>{recommended_team}</b>
 
-            <br><br>
+                <br><br>
 
-            4. ✅ Previous successful resolutions:
-            {len(successful_resolutions)}
-
-            <br><br>
-
-            <b>Agent recommendation:</b>
-            Escalate to {recommended_team} rather than
-            repeatedly using ineffective troubleshooting.
+                ResolveIQ therefore avoids repeating
+                ineffective troubleshooting.
 
             </div>
             """,
@@ -649,59 +1063,13 @@ should be escalated or continue troubleshooting.
     else:
 
         st.write(
-            "The retrieved organizational memory does not "
+            "The recalled organizational memory does not "
             "indicate a strong reason for escalation."
         )
 
 
     # ========================================================
-    # AGENT OUTPUT STATUS
-    # ========================================================
-
-    st.divider()
-
-    st.markdown(
-        '<div class="section-title">🔎 Agent Status</div>',
-        unsafe_allow_html=True,
-    )
-
-    status_col, severity_col, validation_col = st.columns(3)
-
-    with status_col:
-
-        st.metric(
-            "Agent Status",
-            agent_result.get(
-                "status",
-                "unknown"
-            ).upper()
-        )
-
-    with severity_col:
-
-        st.metric(
-            "Severity",
-            agent_result.get(
-                "severity",
-                "unknown"
-            ).upper()
-        )
-
-    with validation_col:
-
-        st.metric(
-            "Output Valid",
-            "Yes"
-            if agent_result.get(
-                "output_valid",
-                False
-            )
-            else "No"
-        )
-
-
-    # ========================================================
-    # SAVE CURRENT RESOLUTION
+    # RECORD RESOLUTION
     # ========================================================
 
     st.divider()
@@ -712,9 +1080,10 @@ should be escalated or continue troubleshooting.
     )
 
     st.caption(
-        "When this case is resolved, save the outcome so "
-        "ResolveIQ can learn from it."
+        "Save the outcome so future cases can learn "
+        "from this experience."
     )
+
 
     resolution = st.text_area(
         "What resolved the issue?",
@@ -723,7 +1092,9 @@ should be escalated or continue troubleshooting.
             "gateway configuration."
         ),
         height=100,
+        key="resolution_input",
     )
+
 
     save_resolution = st.button(
         "🧠 Save Resolution to Hindsight",
@@ -733,13 +1104,29 @@ should be escalated or continue troubleshooting.
 
     if save_resolution:
 
-        memory = f"""
-Customer: {customer_id}
+        customer_id_saved = st.session_state.get(
+            "customer_id",
+            customer_id,
+        )
 
-Issue: {issue}
+        issue_saved = st.session_state.get(
+            "issue",
+            issue,
+        )
+
+        description_saved = st.session_state.get(
+            "description",
+            description,
+        )
+
+
+        memory = f"""
+Customer: {customer_id_saved}
+
+Issue: {issue_saved}
 
 Description:
-{description}
+{description_saved}
 
 Resolution:
 {resolution}
@@ -750,39 +1137,38 @@ similar cases can use the successful resolution instead
 of repeating failed troubleshooting.
 """
 
-        body = {
-            "items": [
-                {
-                    "content": memory,
-                    "document_id": (
-                        f"resolution-{customer_id}"
-                    ),
-                }
-            ],
-            "async": True,
-        }
 
-        try:
+        with st.spinner(
+            "🧠 Saving resolution to Hindsight..."
+        ):
 
-            save_response = requests.post(
-                f"{HINDSIGHT_URL}/v1/default/banks/"
-                f"{BANK_ID}/memories",
-                json=body,
-                timeout=10,
-            )
+            try:
 
-            save_response.raise_for_status()
+                save_memory(memory)
 
-            st.success(
-                "🧠 Resolution saved! "
-                "ResolveIQ can now learn from this outcome."
-            )
+                st.success(
+                    "🧠 Resolution saved successfully! "
+                    "ResolveIQ can now learn from this outcome."
+                )
 
-        except Exception as error:
+            except requests.exceptions.HTTPError as error:
 
-            st.error(
-                f"Could not save resolution: {error}"
-            )
+                status_code = (
+                    error.response.status_code
+                    if error.response is not None
+                    else "unknown"
+                )
+
+                st.error(
+                    f"Could not save memory "
+                    f"(HTTP {status_code})."
+                )
+
+            except Exception as error:
+
+                st.error(
+                    f"Could not save resolution: {error}"
+                )
 
 
 # ============================================================
@@ -792,7 +1178,13 @@ of repeating failed troubleshooting.
 st.markdown(
     """
     <div class="footer">
+
         ResolveIQ · Remember → Recall → Decide → Resolve → Learn
+
+        <br><br>
+
+        AI-powered escalation intelligence using Hindsight memory
+
     </div>
     """,
     unsafe_allow_html=True,
