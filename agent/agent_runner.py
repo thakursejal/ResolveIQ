@@ -28,6 +28,9 @@ def run_agent_with_memory(ticket, recall_historical_cases):
         issue=ticket.get("issue", ""),
         description=ticket.get("description", "")
     )
+    
+    if memory_records is None:
+    memory_records = []
 
     # 2. Prepare Hindsight memories for the AI agent
     historical_context = prepare_historical_context(
