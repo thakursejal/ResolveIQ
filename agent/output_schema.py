@@ -31,6 +31,13 @@ def validate_agent_output(result):
             "missing_fields": missing_fields
         }
 
+        if result.get("status") not in ["success", "fallback"]:
+        return {
+            "valid": False,
+            "missing_fields": [],
+            "error": "Invalid agent status."
+        }
+
     return {
         "valid": True,
         "missing_fields": []
