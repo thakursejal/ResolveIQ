@@ -119,6 +119,13 @@ def run_agent_with_memory(ticket, recall_historical_cases):
         ],
         "escalation_action": action,
         "memory_count": memory_analysis["memory_count"],
+        "learning_signal": (
+    "Repeated failures detected from historical cases."
+    if len(memory_analysis["failed_attempts"]) >= 2
+    else
+    "Previous experience recalled, but repeated failure "
+    "was not established."
+),
         "recommendation": recommendation,
         "reason": reason,
         "ai_reasoning": ai_result.get(
