@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 from .decision import analyze_escalation, get_escalation_action
 from .prompts import SYSTEM_PROMPT, build_agent_prompt
 
+from .memory_parser import prepare_historical_context
+
 
 load_dotenv()
 
@@ -16,10 +18,14 @@ def run_agent(ticket, historical_cases):
     """
 
     # Build context from current ticket and historical memory
-    agent_prompt = build_agent_prompt(
-        ticket,
-        historical_cases
-    )
+    historical_context = prepare_historical_context(
+    historical_cases
+)
+
+agent_prompt = build_agent_prompt(
+    ticket,
+    historical_context
+)
 
     # Get API key
     api_key = os.getenv("GROQ_API_KEY")
