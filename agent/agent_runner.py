@@ -47,16 +47,17 @@ def run_agent_with_memory(ticket, recall_historical_cases):
     )
 
     # 5. Determine operational action from memory evidence
-    action = get_escalation_action(
-        "high"
-        if (
-            memory_analysis["recurring_issue"]
-            and len(memory_analysis["failed_attempts"]) >= 2
-        )
-        else ai_result.get("severity", "medium"),
-        memory_analysis["recurring_issue"],
-        memory_analysis["failed_attempts"]
+   action = get_escalation_action(
+    "high"
+    if (
+        memory_analysis["recurring_issue"]
+        and len(memory_analysis["failed_attempts"]) >= 2
     )
+    else ai_result.get("severity", "medium"),
+    memory_analysis["recurring_issue"],
+    memory_analysis["failed_attempts"],
+    memory_analysis["previous_escalations"]
+)
 
     # 6. Determine final severity
     severity = (
