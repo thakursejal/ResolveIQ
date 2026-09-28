@@ -52,12 +52,24 @@ def get_hindsight_client():
             "GROQ_API_KEY is missing from Streamlit Secrets."
         )
 
-    return HindsightEmbedded(
-        profile="resolveiq",
+    server = HindsightServer(
         llm_provider="groq",
         llm_model=HINDSIGHT_MODEL,
         llm_api_key=GROQ_API_KEY,
     )
+
+    server.start()
+
+    client = HindsightClient(
+        base_url=server.url
+    )
+
+    return server, client
+
+
+def get_hindsight():
+    server, client = get_hindsight_client()
+    return client
 
 
 def get_hindsight():
