@@ -14,6 +14,7 @@ REQUIRED_OUTPUT_FIELDS = [
     "ai_reasoning",
 ]
 
+
 def validate_agent_output(result):
     """
     Validate the structure returned by ResolveIQ.
@@ -31,7 +32,10 @@ def validate_agent_output(result):
             "missing_fields": missing_fields
         }
 
-        if result.get("status") not in ["success", "fallback"]:
+    if result.get("status") not in [
+        "success",
+        "fallback"
+    ]:
         return {
             "valid": False,
             "missing_fields": [],
