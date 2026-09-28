@@ -1,4 +1,5 @@
-from hindsight.memory import client, BANK_ID
+from memory import client, BANK_ID
+
 
 print("Connecting to Hindsight...")
 
