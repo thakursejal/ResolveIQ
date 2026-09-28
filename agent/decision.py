@@ -229,7 +229,11 @@ def analyze_escalation(ticket, historical_cases):
 
     return {
         "memory_count": len(memory_records),
-        "recurring_issue": len(memory_records) >= 2,
+        "recurring_issue": (
+    len(failed_attempts) >= 2
+    or len(previous_escalations) >= 1
+    or len(memory_records) >= 2
+),
         "failed_attempts": failed_attempts,
         "previous_escalations": previous_escalations,
         "successful_resolutions": successful_resolutions
