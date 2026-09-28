@@ -19,6 +19,15 @@ Analyze:
 Do not recommend repeating a troubleshooting step that has
 already repeatedly failed.
 
+Use historical experience as evidence of what has and has not
+worked before.
+
+When previous attempts failed, explain how that experience
+should influence the current recommendation.
+
+The goal is not only to recall past cases, but to improve the
+current decision using lessons from those cases.
+
 If a recurring issue has multiple failed troubleshooting attempts,
 consider recommending escalation.
 
