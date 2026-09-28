@@ -1,5 +1,7 @@
 import streamlit as st
 import requests
+from agent.agent_runner import run_agent_with_memory
+
 
 
 # ============================================================
@@ -261,43 +263,70 @@ should be escalated or continue troubleshooting.
 
 
     # ========================================================
-    # DECISION LOGIC
-    # ========================================================
+# RESOLVEIQ AI AGENT
+# ========================================================
 
-    recurring_issue = any(
-        phrase in combined_memory
-        for phrase in [
-            "repeated",
-            "recurring",
-            "multiple",
-            "again",
-        ]
-    )
-
-    previous_failure = any(
-        phrase in combined_memory
-        for phrase in [
-            "failed",
-            "failure",
-            "did not resolve",
-            "unsuccessful",
-        ]
-    )
-
-    payment_operations = (
-        "payment operations" in combined_memory
-    )
-
-    gateway_fix = (
-        "gateway configuration" in combined_memory
-    )
-
-    escalate = (
-        recurring_issue
-        and previous_failure
-    )
+ticket = {
+    "customer_id": customer_id,
+    "issue": issue,
+    "description": description,
+}
 
 
+def recall_historical_cases(
+    customer_id,
+    issue,
+    description
+):
+    """
+    Return the Hindsight memories already recalled
+    for the current case.
+    """
+
+    return results
+
+
+agent_result = run_agent_with_memory(
+    ticket,
+    recall_historical_cases
+)
+
+
+# ========================================================
+# EXTRACT AGENT DECISION
+# ========================================================
+
+action = agent_result.get(
+    "escalation_action",
+    {}
+)
+
+recurring_issue = agent_result.get(
+    "recurring_issue",
+    False
+)
+
+failed_attempts = agent_result.get(
+    "previous_failed_attempts",
+    []
+)
+
+previous_failure = len(
+    failed_attempts
+) > 0
+
+escalate = (
+    action.get("action") == "ESCALATE"
+)
+
+payment_operations = (
+    action.get("team") == "Payment Operations"
+)
+
+gateway_fix = (
+    "gateway configuration"
+    in combined_memory
+)
     # ========================================================
     # CASE SUMMARY
     # ========================================================
