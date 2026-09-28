@@ -71,12 +71,27 @@ def get_hindsight():
 def recall_memories(query):
     client = get_hindsight()
 
-    results = client.recall(
+    response = client.recall(
         bank_id=BANK_ID,
         query=query,
     )
 
+    results = response.results
+
     normalized = []
+
+    for result in results:
+        normalized.append({
+            "id": getattr(result, "id", None),
+            "text": getattr(result, "text", str(result)),
+            "type": getattr(result, "type", "unknown"),
+            "context": getattr(result, "context", ""),
+            "metadata": getattr(result, "metadata", {}),
+            "entities": getattr(result, "entities", []),
+            "mentioned_at": getattr(result, "mentioned_at", None),
+        })
+
+    return normalized
 
     for result in results:
         if isinstance(result, dict):
