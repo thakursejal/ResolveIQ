@@ -1,11 +1,25 @@
 from .agent import run_agent
 from .decision import analyze_hindsight_memories, get_escalation_action
 from .memory_parser import prepare_historical_context
+from .output_schema import validate_agent_output
 
 
 def run_agent_with_memory(ticket, recall_historical_cases):
     """
     Run ResolveIQ using historical memories recalled by Hindsight.
+
+    Flow:
+    Hindsight Recall
+        ↓
+    Memory Preparation
+        ↓
+    Memory Analysis
+        ↓
+    AI Reasoning
+        ↓
+    Operational Decision
+        ↓
+    Output Validation
     """
 
     # 1. Recall relevant memories from Hindsight
@@ -15,12 +29,12 @@ def run_agent_with_memory(ticket, recall_historical_cases):
         description=ticket.get("description", "")
     )
 
-    # 2. Prepare memories for the AI prompt
+    # 2. Prepare Hindsight memories for the AI agent
     historical_context = prepare_historical_context(
         memory_records
     )
 
-    # 3. Analyze Hindsight memories for escalation signals
+    # 3. Analyze the recalled memories
     memory_analysis = analyze_hindsight_memories(
         ticket,
         historical_context
@@ -32,25 +46,94 @@ def run_agent_with_memory(ticket, recall_historical_cases):
         historical_context
     )
 
-    # 5. Determine operational escalation action
-    severity = "high" if (
-        memory_analysis["recurring_issue"]
-        and len(memory_analysis["failed_attempts"]) >= 2
-    ) else ai_result.get("severity", "medium")
-
+    # 5. Determine operational action from memory evidence
     action = get_escalation_action(
-        severity,
+        "high"
+        if (
+            memory_analysis["recurring_issue"]
+            and len(memory_analysis["failed_attempts"]) >= 2
+        )
+        else ai_result.get("severity", "medium"),
         memory_analysis["recurring_issue"],
         memory_analysis["failed_attempts"]
     )
 
-    return {
-        **ai_result,
+    # 6. Determine final severity
+    severity = (
+        "high"
+        if action["priority"] == "HIGH"
+        else "medium"
+    )
+
+    # 7. Build a consistent recommendation
+    if action["action"] == "ESCALATE":
+
+        recommendation = (
+            f"Escalate to {action['team']}"
+        )
+
+        reason = (
+            "Hindsight recalled a recurring issue with "
+            "multiple unsuccessful troubleshooting attempts. "
+            "Repeating the same troubleshooting is therefore "
+            "not recommended."
+        )
+
+    elif memory_analysis["successful_resolutions"]:
+
+        recommendation = (
+            "Try a previously successful resolution"
+        )
+
+        reason = (
+            "Hindsight recalled a previous successful "
+            "resolution for a related case."
+        )
+
+    else:
+
+        recommendation = (
+            "Continue standard troubleshooting"
+        )
+
+        reason = (
+            "Hindsight did not provide enough evidence "
+            "of repeated failure to justify escalation."
+        )
+
+    # 8. Construct final agent result
+    result = {
+        "agent": "ResolveIQ",
+        "status": ai_result.get("status", "success"),
         "severity": severity,
         "recurring_issue": memory_analysis["recurring_issue"],
-        "previous_failed_attempts": memory_analysis["failed_attempts"],
-        "previous_escalations": memory_analysis["previous_escalations"],
-        "successful_resolutions": memory_analysis["successful_resolutions"],
+        "previous_failed_attempts": memory_analysis[
+            "failed_attempts"
+        ],
+        "previous_escalations": memory_analysis[
+            "previous_escalations"
+        ],
+        "successful_resolutions": memory_analysis[
+            "successful_resolutions"
+        ],
         "escalation_action": action,
-        "memory_count": memory_analysis["memory_count"]
+        "memory_count": memory_analysis["memory_count"],
+        "recommendation": recommendation,
+        "reason": reason,
+        "ai_reasoning": ai_result.get(
+            "ai_reasoning",
+            "No AI reasoning was returned."
+        )
     }
+
+    # 9. Validate final output structure
+    validation = validate_agent_output(result)
+
+    result["output_valid"] = validation["valid"]
+
+    if not validation["valid"]:
+        result["missing_output_fields"] = (
+            validation["missing_fields"]
+        )
+
+    return result
