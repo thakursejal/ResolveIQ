@@ -2,9 +2,6 @@ def prepare_historical_context(memory_records):
     """
     Convert Hindsight memory records into a clean context
     for the ResolveIQ AI agent.
-
-    The agent depends primarily on the memory text and does
-    not depend on Hindsight's complete raw response structure.
     """
 
     if not memory_records:
@@ -33,8 +30,9 @@ def prepare_historical_context(memory_records):
         })
 
     return historical_context
-    
-    def format_historical_context(memory_records):
+
+
+def format_historical_context(memory_records):
     """
     Format prepared Hindsight memories into readable context
     for the AI agent.
@@ -47,7 +45,10 @@ def prepare_historical_context(memory_records):
 
     for index, memory in enumerate(memory_records, start=1):
 
-        text = memory.get("text", "No memory text available.")
+        text = memory.get(
+            "text",
+            "No memory text available."
+        )
 
         memory_type = memory.get(
             "type",
@@ -80,6 +81,8 @@ def prepare_historical_context(memory_records):
                 f"Recorded at: {mentioned_at}\n"
             )
 
-        formatted_memories.append(formatted_memory)
+        formatted_memories.append(
+            formatted_memory
+        )
 
     return "\n".join(formatted_memories)
