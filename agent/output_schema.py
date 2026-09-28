@@ -8,6 +8,7 @@ REQUIRED_OUTPUT_FIELDS = [
     "successful_resolutions",
     "escalation_action",
     "memory_count",
+    "learning_signal",
     "recommendation",
     "reason",
     "ai_reasoning",
