@@ -61,6 +61,17 @@ RELEVANT HISTORICAL CASES:
 
 {historical_cases}
 
+LEARNING OBJECTIVE:
+
+Use the historical cases to identify:
+- What troubleshooting approaches failed
+- What approaches succeeded
+- Whether the issue has recurred
+- Whether escalation was previously required
+- What lesson should influence the current decision
+
+Do not repeat approaches that historical experience shows
+have repeatedly failed.
 
 TASK:
 
