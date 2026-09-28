@@ -203,7 +203,26 @@ def analyze_escalation(ticket, historical_cases):
         ]
 
         if any(keyword in text_lower for keyword in failure_keywords):
-            failed_attempts.append(text)
+
+    sentences = [
+        sentence.strip()
+        for sentence in text.replace("!", ".").replace("?", ".").split(".")
+        if sentence.strip()
+    ]
+
+    matched_failures = [
+        sentence
+        for sentence in sentences
+        if any(
+            keyword in sentence.lower()
+            for keyword in failure_keywords
+        )
+    ]
+
+    if matched_failures:
+        failed_attempts.extend(matched_failures)
+    else:
+        failed_attempts.append(text)
 
         # Identify previous escalation
         escalation_keywords = [
