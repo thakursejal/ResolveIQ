@@ -1,15 +1,24 @@
-import streamlit as st
-import requests
-from agent.agent_runner import run_agent_with_memory
+import os
 
+import requests
+import streamlit as st
+
+from agent.agent_runner import run_agent_with_memory
 
 
 # ============================================================
 # CONFIG
 # ============================================================
 
-HINDSIGHT_URL = "http://localhost:8888"
-BANK_ID = "ResolveIQ"
+HINDSIGHT_URL = os.getenv(
+    "HINDSIGHT_URL",
+    "http://localhost:8888"
+)
+
+BANK_ID = os.getenv(
+    "HINDSIGHT_BANK_ID",
+    "ResolveIQ"
+)
 
 
 # ============================================================
@@ -31,6 +40,7 @@ st.set_page_config(
 st.markdown(
     """
     <style>
+
     [data-testid="stAppViewContainer"] {
         background: #f7f8fc;
     }
@@ -131,6 +141,7 @@ st.markdown(
         font-size: 13px;
         margin-top: 40px;
     }
+
     </style>
     """,
     unsafe_allow_html=True,
@@ -197,6 +208,10 @@ analyze = st.button(
 
 if analyze:
 
+    # ========================================================
+    # BUILD HINDSIGHT QUERY
+    # ========================================================
+
     query = f"""
 Customer ID: {customer_id}
 
@@ -220,13 +235,20 @@ Use the historical memory to help decide whether this case
 should be escalated or continue troubleshooting.
 """
 
+    # ========================================================
+    # RECALL HINDSIGHT MEMORY
+    # ========================================================
+
     with st.spinner("🧠 Recalling organizational memory..."):
 
         try:
 
             response = requests.post(
-                f"{HINDSIGHT_URL}/v1/default/banks/{BANK_ID}/memories/recall",
-                json={"query": query},
+                f"{HINDSIGHT_URL}/v1/default/banks/"
+                f"{BANK_ID}/memories/recall",
+                json={
+                    "query": query
+                },
                 timeout=30,
             )
 
@@ -234,10 +256,10 @@ should be escalated or continue troubleshooting.
 
             data = response.json()
 
-        except Exception as e:
+        except Exception as error:
 
             st.error(
-                f"Could not connect to Hindsight: {e}"
+                f"Could not connect to Hindsight: {error}"
             )
 
             st.stop()
@@ -247,19 +269,31 @@ should be escalated or continue troubleshooting.
     # EXTRACT RECALL RESULTS
     # ========================================================
 
-    results = data.get("results", [])
+    results = data.get(
+        "results",
+        []
+    )
 
     memory_texts = []
 
     for item in results:
 
-        text = item.get("text", "")
+        if not isinstance(item, dict):
+            continue
+
+        text = item.get(
+            "text",
+            ""
+        )
 
         if text:
             memory_texts.append(text)
 
 
-    combined_memory = " ".join(memory_texts).lower()
+    combined_memory = (
+        " ".join(memory_texts)
+        .lower()
+    )
 
 
     # ========================================================
@@ -272,21 +306,39 @@ should be escalated or continue troubleshooting.
         "description": description,
     }
 
+
     def recall_historical_cases(
         customer_id,
         issue,
         description
     ):
         """
-        Return the Hindsight memories already recalled
-        for the current case.
+        Return the Hindsight memories already
+        recalled for this case.
         """
+
         return results
 
-    agent_result = run_agent_with_memory(
-        ticket,
-        recall_historical_cases
-    )
+
+    with st.spinner(
+        "🤖 ResolveIQ is reasoning from historical experience..."
+    ):
+
+        try:
+
+            agent_result = run_agent_with_memory(
+                ticket,
+                recall_historical_cases
+            )
+
+        except Exception as error:
+
+            st.error(
+                f"ResolveIQ agent error: {error}"
+            )
+
+            st.stop()
+
 
     # ========================================================
     # EXTRACT AGENT DECISION
@@ -307,57 +359,35 @@ should be escalated or continue troubleshooting.
         []
     )
 
-    previous_failure = len(
-        failed_attempts
-    ) > 0
+    previous_escalations = agent_result.get(
+        "previous_escalations",
+        []
+    )
+
+    successful_resolutions = agent_result.get(
+        "successful_resolutions",
+        []
+    )
+
+    previous_failure = (
+        len(failed_attempts) > 0
+    )
 
     escalate = (
         action.get("action") == "ESCALATE"
     )
 
-    payment_operations = (
-        action.get("team") == "Payment Operations"
+    recommended_team = action.get(
+        "team",
+        "Customer Support"
     )
 
     gateway_fix = (
         "gateway configuration"
         in combined_memory
     )
-# ========================================================
-# EXTRACT AGENT DECISION
-# ========================================================
 
-action = agent_result.get(
-    "escalation_action",
-    {}
-)
 
-recurring_issue = agent_result.get(
-    "recurring_issue",
-    False
-)
-
-failed_attempts = agent_result.get(
-    "previous_failed_attempts",
-    []
-)
-
-previous_failure = len(
-    failed_attempts
-) > 0
-
-escalate = (
-    action.get("action") == "ESCALATE"
-)
-
-payment_operations = (
-    action.get("team") == "Payment Operations"
-)
-
-gateway_fix = (
-    "gateway configuration"
-    in combined_memory
-)
     # ========================================================
     # CASE SUMMARY
     # ========================================================
@@ -372,21 +402,24 @@ gateway_fix = (
     metric1, metric2, metric3 = st.columns(3)
 
     with metric1:
+
         st.metric(
             "Historical matches",
             len(results),
         )
 
     with metric2:
+
         st.metric(
             "Recurring issue",
             "Yes" if recurring_issue else "No",
         )
 
     with metric3:
+
         st.metric(
             "Previous failures",
-            "Detected" if previous_failure else "None",
+            len(failed_attempts),
         )
 
 
@@ -399,6 +432,7 @@ gateway_fix = (
         unsafe_allow_html=True,
     )
 
+
     if escalate:
 
         st.markdown(
@@ -407,9 +441,10 @@ gateway_fix = (
                 <div class="recommendation-title">
                     🔴 ESCALATION RECOMMENDED
                 </div>
+
                 <div>
-                    ResolveIQ found historical evidence that similar
-                    troubleshooting attempts failed.
+                    ResolveIQ found historical evidence of
+                    repeated troubleshooting failure.
                 </div>
             </div>
             """,
@@ -421,18 +456,20 @@ gateway_fix = (
         with team_col:
 
             st.markdown(
-                """
+                f"""
                 <div class="result-card">
                     <div class="small-label">
                         Recommended Team
                     </div>
+
                     <div class="team-name">
-                        🏢 Payment Operations
+                        🏢 {recommended_team}
                     </div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
+
 
         with signal_col:
 
@@ -442,6 +479,7 @@ gateway_fix = (
                     <div class="small-label">
                         Memory Signal
                     </div>
+
                     <div class="team-name">
                         🔁 Recurring failure
                     </div>
@@ -450,11 +488,13 @@ gateway_fix = (
                 unsafe_allow_html=True,
             )
 
+
         if gateway_fix:
 
             st.info(
                 "💡 Previous successful resolution: "
-                "Payment Operations fixed the payment gateway configuration."
+                "Payment Operations fixed the payment "
+                "gateway configuration."
             )
 
     else:
@@ -465,8 +505,10 @@ gateway_fix = (
                 <div class="recommendation-title">
                     🟢 CONTINUE TROUBLESHOOTING
                 </div>
+
                 <div>
-                    No strong historical escalation signal was found.
+                    No strong historical escalation signal
+                    was found.
                 </div>
             </div>
             """,
@@ -484,6 +526,7 @@ gateway_fix = (
         '<div class="section-title">🧠 What ResolveIQ Remembered</div>',
         unsafe_allow_html=True,
     )
+
 
     if memory_texts:
 
@@ -507,6 +550,51 @@ gateway_fix = (
 
 
     # ========================================================
+    # AI REASONING
+    # ========================================================
+
+    st.divider()
+
+    st.markdown(
+        '<div class="section-title">🤖 AI Agent Reasoning</div>',
+        unsafe_allow_html=True,
+    )
+
+    ai_reasoning = agent_result.get(
+        "ai_reasoning",
+        "No AI reasoning was returned."
+    )
+
+    st.markdown(
+        f"""
+        <div class="result-card">
+            {ai_reasoning}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+    # ========================================================
+    # LEARNING SIGNAL
+    # ========================================================
+
+    st.markdown(
+        '<div class="section-title">📚 Learning Signal</div>',
+        unsafe_allow_html=True,
+    )
+
+    learning_signal = agent_result.get(
+        "learning_signal",
+        "No learning signal available."
+    )
+
+    st.info(
+        learning_signal
+    )
+
+
+    # ========================================================
     # EXPLAINABILITY
     # ========================================================
 
@@ -517,37 +605,41 @@ gateway_fix = (
         unsafe_allow_html=True,
     )
 
+
     if escalate:
 
         st.markdown(
-            """
+            f"""
             <div class="result-card">
 
-            <b>ResolveIQ connected the current case with
-            organizational memory:</b>
+            <b>ResolveIQ connected the current case
+            with organizational memory:</b>
 
             <br><br>
 
-            1. 🔁 Similar payment failures occurred before.
+            1. 🔁 Similar payment-related cases
+            were found in historical memory.
 
             <br><br>
 
-            2. ❌ Previous troubleshooting attempts failed.
+            2. ❌ Historical failed attempts:
+            {len(failed_attempts)}
 
             <br><br>
 
-            3. 🏢 The previous case was escalated to
-            Payment Operations.
+            3. 🏢 Previous escalations:
+            {len(previous_escalations)}
 
             <br><br>
 
-            4. ✅ Payment Operations resolved the previous
-            issue by fixing the payment gateway configuration.
+            4. ✅ Previous successful resolutions:
+            {len(successful_resolutions)}
 
             <br><br>
 
-            <b>Decision:</b> avoid repeating ineffective
-            troubleshooting and escalate.
+            <b>Agent recommendation:</b>
+            Escalate to {recommended_team} rather than
+            repeatedly using ineffective troubleshooting.
 
             </div>
             """,
@@ -559,6 +651,52 @@ gateway_fix = (
         st.write(
             "The retrieved organizational memory does not "
             "indicate a strong reason for escalation."
+        )
+
+
+    # ========================================================
+    # AGENT OUTPUT STATUS
+    # ========================================================
+
+    st.divider()
+
+    st.markdown(
+        '<div class="section-title">🔎 Agent Status</div>',
+        unsafe_allow_html=True,
+    )
+
+    status_col, severity_col, validation_col = st.columns(3)
+
+    with status_col:
+
+        st.metric(
+            "Agent Status",
+            agent_result.get(
+                "status",
+                "unknown"
+            ).upper()
+        )
+
+    with severity_col:
+
+        st.metric(
+            "Severity",
+            agent_result.get(
+                "severity",
+                "unknown"
+            ).upper()
+        )
+
+    with validation_col:
+
+        st.metric(
+            "Output Valid",
+            "Yes"
+            if agent_result.get(
+                "output_valid",
+                False
+            )
+            else "No"
         )
 
 
@@ -616,7 +754,9 @@ of repeating failed troubleshooting.
             "items": [
                 {
                     "content": memory,
-                    "document_id": f"resolution-{customer_id}",
+                    "document_id": (
+                        f"resolution-{customer_id}"
+                    ),
                 }
             ],
             "async": True,
@@ -625,7 +765,8 @@ of repeating failed troubleshooting.
         try:
 
             save_response = requests.post(
-                f"{HINDSIGHT_URL}/v1/default/banks/{BANK_ID}/memories",
+                f"{HINDSIGHT_URL}/v1/default/banks/"
+                f"{BANK_ID}/memories",
                 json=body,
                 timeout=10,
             )
@@ -637,10 +778,10 @@ of repeating failed troubleshooting.
                 "ResolveIQ can now learn from this outcome."
             )
 
-        except Exception as e:
+        except Exception as error:
 
             st.error(
-                f"Could not save resolution: {e}"
+                f"Could not save resolution: {error}"
             )
 
 
