@@ -139,7 +139,7 @@ def save_memory(memory):
 # CUSTOM STYLING
 # ============================================================
 
-render_html(
+st.markdown(
     """
     <style>
 
