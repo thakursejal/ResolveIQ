@@ -263,35 +263,66 @@ should be escalated or continue troubleshooting.
 
 
     # ========================================================
-# RESOLVEIQ AI AGENT
-# ========================================================
+    # RESOLVEIQ AI AGENT
+    # ========================================================
 
-ticket = {
-    "customer_id": customer_id,
-    "issue": issue,
-    "description": description,
-}
+    ticket = {
+        "customer_id": customer_id,
+        "issue": issue,
+        "description": description,
+    }
 
+    def recall_historical_cases(
+        customer_id,
+        issue,
+        description
+    ):
+        """
+        Return the Hindsight memories already recalled
+        for the current case.
+        """
+        return results
 
-def recall_historical_cases(
-    customer_id,
-    issue,
-    description
-):
-    """
-    Return the Hindsight memories already recalled
-    for the current case.
-    """
+    agent_result = run_agent_with_memory(
+        ticket,
+        recall_historical_cases
+    )
 
-    return results
+    # ========================================================
+    # EXTRACT AGENT DECISION
+    # ========================================================
 
+    action = agent_result.get(
+        "escalation_action",
+        {}
+    )
 
-agent_result = run_agent_with_memory(
-    ticket,
-    recall_historical_cases
-)
+    recurring_issue = agent_result.get(
+        "recurring_issue",
+        False
+    )
 
+    failed_attempts = agent_result.get(
+        "previous_failed_attempts",
+        []
+    )
 
+    previous_failure = len(
+        failed_attempts
+    ) > 0
+
+    escalate = (
+        action.get("action") == "ESCALATE"
+    )
+
+    payment_operations = (
+        action.get("team") == "Payment Operations"
+    )
+
+    gateway_fix = (
+        "gateway configuration"
+        in combined_memory
+    )
 # ========================================================
 # EXTRACT AGENT DECISION
 # ========================================================
