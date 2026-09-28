@@ -6,7 +6,10 @@ from dotenv import load_dotenv
 from .decision import analyze_escalation, get_escalation_action
 from .prompts import SYSTEM_PROMPT, build_agent_prompt
 
-from .memory_parser import prepare_historical_context
+from .memory_parser import (
+    prepare_historical_context,
+    format_historical_context
+)
 
 
 load_dotenv()
@@ -22,9 +25,13 @@ def run_agent(ticket, historical_cases):
     historical_cases
 )
 
+formatted_context = format_historical_context(
+    historical_context
+)
+
 agent_prompt = build_agent_prompt(
     ticket,
-    historical_context
+    formatted_context
 )
 
     # Get API key
