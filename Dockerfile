@@ -1,7 +1,3 @@
-FROM python:3.11-slim
-
-RUN pip install --no-cache-dir hindsight
+FROM ghcr.io/vectorize-io/hindsight:latest
 
 EXPOSE 8888
-
-CMD ["hindsight", "serve", "--host", "0.0.0.0", "--port", "8888"]
