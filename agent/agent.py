@@ -10,6 +10,39 @@ from .memory_parser import format_historical_context
 
 load_dotenv()
 
+ESCALATION_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "evaluate_escalation",
+        "description": (
+            "Evaluate whether a support issue should be escalated "
+            "using historical failure and escalation evidence."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "recurring_issue": {
+                    "type": "boolean",
+                    "description": "Whether the issue appears recurring."
+                },
+                "failed_attempts": {
+                    "type": "integer",
+                    "description": "Number of failed historical attempts."
+                },
+                "previous_escalations": {
+                    "type": "integer",
+                    "description": "Number of previous escalations recalled."
+                }
+            },
+            "required": [
+                "recurring_issue",
+                "failed_attempts",
+                "previous_escalations"
+            ]
+        }
+    }
+}
+
 
 def run_agent(ticket, historical_cases):
     """
@@ -41,6 +74,7 @@ agent_prompt = build_agent_prompt(
 
         response = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
+                        tools=[ESCALATION_TOOL],
             messages=[
                 {
                     "role": "system",
@@ -54,7 +88,24 @@ agent_prompt = build_agent_prompt(
             temperature=0.2,
         )
 
-        ai_reasoning = response.choices[0].message.content
+        message = response.choices[0].message
+
+if getattr(message, "tool_calls", None):
+    tool_call = message.tool_calls[0]
+
+    if tool_call.function.name != "evaluate_escalation":
+        raise ValueError(
+            f"Unsupported tool requested: "
+            f"{tool_call.function.name}"
+        )
+
+    ai_reasoning = (
+        "ResolveIQ requested escalation analysis using "
+        "historical evidence before producing its recommendation."
+    )
+
+else:
+    ai_reasoning = message.content
 
               return {
             "agent": "ResolveIQ",
