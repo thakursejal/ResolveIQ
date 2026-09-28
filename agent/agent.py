@@ -4,11 +4,11 @@ from groq import Groq
 from dotenv import load_dotenv
 
 from .prompts import SYSTEM_PROMPT, build_agent_prompt
-
 from .memory_parser import format_historical_context
 
 
 load_dotenv()
+
 
 ESCALATION_TOOL = {
     "type": "function",
@@ -46,18 +46,18 @@ ESCALATION_TOOL = {
 
 def run_agent(ticket, historical_cases):
     """
-    Run the ResolveIQ AI escalation agent.
+    Run the ResolveIQ AI reasoning layer.
     """
 
-    # Build context from current ticket and historical memory
-  formatted_context = format_historical_context(
-    historical_cases
-)
+    # Build context from Hindsight memory
+    formatted_context = format_historical_context(
+        historical_cases
+    )
 
-agent_prompt = build_agent_prompt(
-    ticket,
-    formatted_context
-)
+    agent_prompt = build_agent_prompt(
+        ticket,
+        formatted_context
+    )
 
     # Get API key
     api_key = os.getenv("GROQ_API_KEY")
@@ -65,7 +65,12 @@ agent_prompt = build_agent_prompt(
     if not api_key:
         return {
             "agent": "ResolveIQ",
-            "status": "error",
+            "status": "fallback",
+            "prompt_version": "v3",
+            "ai_reasoning": (
+                "LLM unavailable because the Groq API key "
+                "is not configured."
+            ),
             "error": "GROQ_API_KEY is not configured."
         }
 
@@ -74,7 +79,7 @@ agent_prompt = build_agent_prompt(
 
         response = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
-                        tools=[ESCALATION_TOOL],
+            tools=[ESCALATION_TOOL],
             messages=[
                 {
                     "role": "system",
@@ -90,30 +95,38 @@ agent_prompt = build_agent_prompt(
 
         message = response.choices[0].message
 
-if getattr(message, "tool_calls", None):
-    tool_call = message.tool_calls[0]
+        # Handle function-calling response safely
+        if getattr(message, "tool_calls", None):
 
-    if tool_call.function.name != "evaluate_escalation":
-        raise ValueError(
-            f"Unsupported tool requested: "
-            f"{tool_call.function.name}"
-        )
+            tool_call = message.tool_calls[0]
 
-    ai_reasoning = (
-        "ResolveIQ requested escalation analysis using "
-        "historical evidence before producing its recommendation."
-    )
+            if tool_call.function.name != "evaluate_escalation":
+                raise ValueError(
+                    f"Unsupported tool requested: "
+                    f"{tool_call.function.name}"
+                )
 
-else:
-    ai_reasoning = message.content
+            ai_reasoning = (
+                "ResolveIQ requested escalation analysis using "
+                "historical evidence before producing its "
+                "recommendation."
+            )
 
-              return {
+        else:
+
+            ai_reasoning = (
+                message.content
+                or "No AI reasoning was returned."
+            )
+
+        return {
             "agent": "ResolveIQ",
             "status": "success",
             "prompt_version": "v3",
             "ai_reasoning": ai_reasoning
-              }
-       except Exception as error:
+        }
+
+    except Exception as error:
 
         return {
             "agent": "ResolveIQ",
@@ -126,22 +139,3 @@ else:
             ),
             "error": str(error)
         }
-
-    action = get_escalation_action(
-        decision["severity"],
-        decision["recurring_issue"],
-        decision["previous_failed_attempts"]
-    )
-
-    return {
-        **decision,
-        "escalation_action": action,
-        "agent": "ResolveIQ",
-        "status": "fallback",
-        "prompt_version": "v3",
-        "ai_reasoning": (
-            "LLM unavailable. "
-            "ResolveIQ used its structured escalation logic."
-        ),
-        "error": str(error)
-    }
