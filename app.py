@@ -1,6 +1,7 @@
 import os
-import requests
 import streamlit as st
+
+from hindsight import HindsightEmbedded
 
 from agent.agent_runner import run_agent_with_memory
 
@@ -17,77 +18,95 @@ st.set_page_config(
 
 
 # ============================================================
-# HINDSIGHT CONFIG
+# SECRETS
 # ============================================================
 
 def get_secret(name, default=""):
     try:
-        if name in st.secrets:
-            return st.secrets[name]
+        value = st.secrets.get(name)
+        if value:
+            return value
     except Exception:
         pass
+
     return os.getenv(name, default)
 
 
-HINDSIGHT_BASE_URL = get_secret(
-    "HINDSIGHT_BASE_URL",
-    "https://api.hindsight.vectorize.io",
+GROQ_API_KEY = get_secret("GROQ_API_KEY")
+HINDSIGHT_MODEL = get_secret(
+    "HINDSIGHT_API_LLM_MODEL",
+    "openai/gpt-oss-20b",
 )
-HINDSIGHT_API_KEY = get_secret("HINDSIGHT_API_KEY", "")
-BANK_ID = get_secret("HINDSIGHT_BANK_ID", "ResolveIQ")
+
+BANK_ID = "resolveiq"
 
 
-def hindsight_headers():
-    return {
-        "Authorization": f"Bearer {HINDSIGHT_API_KEY}",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
+# ============================================================
+# HINDSIGHT EMBEDDED CLIENT
+# ============================================================
 
-
-def recall_memories(query):
-    if not HINDSIGHT_API_KEY:
+@st.cache_resource
+def get_hindsight_client():
+    if not GROQ_API_KEY:
         raise RuntimeError(
-            "HINDSIGHT_API_KEY is missing from Streamlit Secrets."
+            "GROQ_API_KEY is missing from Streamlit Secrets."
         )
 
-    url = (
-        f"{HINDSIGHT_BASE_URL}"
-        f"/v1/default/banks/{BANK_ID}/memories/recall"
+    return HindsightEmbedded(
+        profile="resolveiq",
+        llm_provider="groq",
+        llm_model=HINDSIGHT_MODEL,
+        llm_api_key=GROQ_API_KEY,
     )
 
-    response = requests.post(
-        url,
-        headers=hindsight_headers(),
-        json={"query": query},
-        timeout=30,
+
+def get_hindsight():
+    return get_hindsight_client()
+
+
+# ============================================================
+# HINDSIGHT HELPERS
+# ============================================================
+
+def recall_memories(query):
+    client = get_hindsight()
+
+    results = client.recall(
+        bank_id=BANK_ID,
+        query=query,
     )
-    response.raise_for_status()
-    return response.json()
+
+    normalized = []
+
+    for result in results:
+        if isinstance(result, dict):
+            normalized.append(result)
+            continue
+
+        normalized.append({
+            "id": getattr(result, "id", None),
+            "text": getattr(result, "text", str(result)),
+            "type": getattr(result, "type", "unknown"),
+            "context": getattr(result, "context", ""),
+            "metadata": getattr(result, "metadata", {}),
+            "entities": getattr(result, "entities", []),
+            "mentioned_at": getattr(
+                result,
+                "mentioned_at",
+                None,
+            ),
+        })
+
+    return normalized
 
 
 def save_memory(memory):
-    if not HINDSIGHT_API_KEY:
-        raise RuntimeError(
-            "HINDSIGHT_API_KEY is missing from Streamlit Secrets."
-        )
+    client = get_hindsight()
 
-    url = (
-        f"{HINDSIGHT_BASE_URL}"
-        f"/v1/default/banks/{BANK_ID}/memories"
+    return client.retain(
+        bank_id=BANK_ID,
+        content=memory,
     )
-
-    response = requests.post(
-        url,
-        headers=hindsight_headers(),
-        json={
-            "items": [{"content": memory}],
-            "async": True,
-        },
-        timeout=20,
-    )
-    response.raise_for_status()
-    return response.json()
 
 
 # ============================================================
@@ -95,13 +114,23 @@ def save_memory(memory):
 # ============================================================
 
 st.title("🧠 ResolveIQ")
-st.subheader("Escalation Intelligence powered by organizational memory")
-st.caption("Remember → Recall → Decide → Resolve → Learn")
 
-if HINDSIGHT_API_KEY:
-    st.success("🟢 Connected to Hindsight Cloud")
+st.subheader(
+    "Escalation Intelligence powered by organizational memory"
+)
+
+st.caption(
+    "Remember → Recall → Decide → Resolve → Learn"
+)
+
+if GROQ_API_KEY:
+    st.success(
+        "🟢 Hindsight Embedded + Groq configured"
+    )
 else:
-    st.warning("Hindsight API key is not configured in Streamlit Secrets.")
+    st.error(
+        "🔴 GROQ_API_KEY is missing."
+    )
 
 
 # ============================================================
@@ -126,65 +155,62 @@ with col2:
 
 description = st.text_area(
     "Customer description",
-    value="Customer says their payment has failed multiple times.",
+    value=(
+        "Customer says their payment has failed multiple times "
+        "despite retrying the transaction."
+    ),
     height=110,
 )
 
 
 # ============================================================
-# ANALYZE
+# ANALYZE CASE
 # ============================================================
 
-if st.button("🔍 Analyze Case", type="primary", use_container_width=True):
+if st.button(
+    "🔍 Analyze Case",
+    type="primary",
+    use_container_width=True,
+):
 
     query = f"""
 Customer ID: {customer_id}
 
-Issue: {issue}
+Current issue:
+{issue}
 
-Description:
+Customer description:
 {description}
 
-Find relevant historical organizational memory.
+Find organizational memories relevant to this case.
 
-Identify:
-- previous similar cases
-- troubleshooting attempts
-- failed attempts
+Prioritize:
+- similar payment failures
+- previous troubleshooting attempts
+- failed troubleshooting attempts
 - successful resolutions
-- recurring patterns
-- escalation lessons
-- teams that previously resolved the issue
+- recurring failure patterns
+- previous escalations
+- teams involved
+- lessons learned
+- cases where repeating the same approach failed
 
-Use the historical memory to help decide whether this case
-should be escalated or continue troubleshooting.
+The goal is to determine whether historical experience
+supports continued troubleshooting or escalation.
 """
 
-    with st.spinner("🧠 Recalling organizational memory..."):
+    with st.spinner(
+        "🧠 Recalling organizational experience..."
+    ):
         try:
-            data = recall_memories(query)
-        except requests.exceptions.HTTPError as error:
-            status_code = (
-                error.response.status_code
-                if error.response is not None
-                else "unknown"
-            )
-            st.error(f"Hindsight request failed (HTTP {status_code}).")
+            results = recall_memories(query)
 
-            if status_code == 401:
-                st.info("The Hindsight API key is invalid, expired, or unauthorized.")
-            elif status_code == 404:
-                st.info(f"The Hindsight bank '{BANK_ID}' was not found.")
-            elif status_code == 402:
-                st.info("Hindsight reports insufficient credits.")
-            st.stop()
         except Exception as error:
-            st.error(f"Could not connect to Hindsight Cloud: {error}")
+            st.error(
+                "Hindsight Embedded could not start or recall memory."
+            )
+            st.code(str(error))
             st.stop()
-
-    results = data.get("results", [])
-    if not isinstance(results, list):
-        results = []
 
     ticket = {
         "customer_id": customer_id,
@@ -192,10 +218,16 @@ should be escalated or continue troubleshooting.
         "description": description,
     }
 
-    def recall_historical_cases(customer_id, issue, description):
+    def recall_historical_cases(
+        customer_id,
+        issue,
+        description,
+    ):
         return results
 
-    with st.spinner("🤖 ResolveIQ is analyzing the case..."):
+    with st.spinner(
+        "🤖 ResolveIQ is reasoning over the experience..."
+    ):
         agent_result = run_agent_with_memory(
             ticket,
             recall_historical_cases,
@@ -213,66 +245,180 @@ should be escalated or continue troubleshooting.
 # RESULTS
 # ============================================================
 
-if st.session_state.get("analysis_complete", False):
+if st.session_state.get(
+    "analysis_complete",
+    False,
+):
 
-    results = st.session_state.get("results", [])
-    agent_result = st.session_state.get("agent_result", {})
+    results = st.session_state.get(
+        "results",
+        [],
+    )
 
-    action = agent_result.get("escalation_action", {})
-    failed_attempts = agent_result.get("previous_failed_attempts", [])
-    previous_escalations = agent_result.get("previous_escalations", [])
-    successful_resolutions = agent_result.get("successful_resolutions", [])
+    agent_result = st.session_state.get(
+        "agent_result",
+        {},
+    )
 
-    recurring_issue = agent_result.get("recurring_issue", False)
-    escalate = action.get("action") == "ESCALATE"
-    recommended_team = action.get("team", "Customer Support")
+    action = agent_result.get(
+        "escalation_action",
+        {},
+    )
+
+    failed_attempts = agent_result.get(
+        "previous_failed_attempts",
+        [],
+    )
+
+    previous_escalations = agent_result.get(
+        "previous_escalations",
+        [],
+    )
+
+    successful_resolutions = agent_result.get(
+        "successful_resolutions",
+        [],
+    )
+
+    recurring_issue = agent_result.get(
+        "recurring_issue",
+        False,
+    )
+
+    escalate = (
+        action.get("action") == "ESCALATE"
+    )
+
+    recommended_team = action.get(
+        "team",
+        "Customer Support",
+    )
+
+
+    # ========================================================
+    # CASE ANALYSIS
+    # ========================================================
 
     st.divider()
+
     st.header("📊 Case Analysis")
 
     m1, m2, m3, m4 = st.columns(4)
 
     with m1:
-        st.metric("Historical Matches", len(results))
+        st.metric(
+            "Historical Matches",
+            len(results),
+        )
 
     with m2:
-        st.metric("Recurring Issue", "Yes" if recurring_issue else "No")
+        st.metric(
+            "Recurring Issue",
+            "YES" if recurring_issue else "NO",
+        )
 
     with m3:
-        st.metric("Failed Attempts", len(failed_attempts))
+        st.metric(
+            "Failed Attempts",
+            len(failed_attempts),
+        )
 
     with m4:
-        st.metric("Previous Escalations", len(previous_escalations))
+        st.metric(
+            "Previous Escalations",
+            len(previous_escalations),
+        )
 
-    st.header("🚨 ResolveIQ Recommendation")
+
+    # ========================================================
+    # RECOMMENDATION
+    # ========================================================
+
+    st.header(
+        "🚨 ResolveIQ Recommendation"
+    )
 
     if escalate:
-        st.error("🔴 ESCALATION RECOMMENDED")
-        st.write(f"**Recommended Team:** 🏢 {recommended_team}")
-        st.write(
-            "ResolveIQ recalled repeated unsuccessful troubleshooting "
-            "and recommends avoiding the same ineffective approach."
-        )
-    else:
-        st.success("🟢 CONTINUE TROUBLESHOOTING")
-        st.write(
-            "Hindsight did not provide enough historical evidence "
-            "to justify escalation."
+
+        st.error(
+            "🔴 ESCALATION RECOMMENDED"
         )
 
-    st.header("🧠 What ResolveIQ Remembered")
+        st.write(
+            f"### 🏢 Recommended Team: "
+            f"{recommended_team}"
+        )
+
+        st.write(
+            "ResolveIQ recalled repeated unsuccessful "
+            "troubleshooting and recommends avoiding "
+            "the same ineffective approach."
+        )
+
+    else:
+
+        st.success(
+            "🟢 CONTINUE TROUBLESHOOTING"
+        )
+
+        st.write(
+            "Historical experience does not yet provide "
+            "enough evidence to justify escalation."
+        )
+
+
+    # ========================================================
+    # MEMORY
+    # ========================================================
+
+    st.header(
+        "🧠 What Hindsight Remembered"
+    )
 
     if results:
-        for i, memory in enumerate(results[:5], start=1):
-            with st.expander(f"Historical memory #{i}", expanded=(i == 1)):
-                if isinstance(memory, dict):
-                    st.write(memory.get("text", memory))
-                else:
-                    st.write(memory)
-    else:
-        st.info("No relevant historical memory was found.")
 
-    st.header("🤖 AI Agent Reasoning")
+        for index, memory in enumerate(
+            results[:5],
+            start=1,
+        ):
+
+            with st.expander(
+                f"Historical memory #{index}",
+                expanded=(index == 1),
+            ):
+
+                st.write(
+                    memory.get(
+                        "text",
+                        "No memory text available.",
+                    )
+                )
+
+                memory_type = memory.get(
+                    "type",
+                    "unknown",
+                )
+
+                if memory_type:
+                    st.caption(
+                        f"Memory type: {memory_type}"
+                    )
+
+    else:
+
+        st.info(
+            "No relevant organizational memory was found."
+        )
+
+
+    # ========================================================
+    # AI REASONING
+    # ========================================================
+
+    st.header(
+        "🤖 AI Agent Reasoning"
+    )
+
     st.info(
         agent_result.get(
             "ai_reasoning",
@@ -280,7 +426,15 @@ if st.session_state.get("analysis_complete", False):
         )
     )
 
-    st.header("📚 Learning Signal")
+
+    # ========================================================
+    # LEARNING SIGNAL
+    # ========================================================
+
+    st.header(
+        "📚 Learning Signal"
+    )
+
     st.info(
         agent_result.get(
             "learning_signal",
@@ -288,42 +442,81 @@ if st.session_state.get("analysis_complete", False):
         )
     )
 
-    st.header("💡 Why this decision?")
 
-    if escalate:
-        st.write(
-            f"**Recurring issue:** {recurring_issue}"
+    # ========================================================
+    # DECISION EXPLANATION
+    # ========================================================
+
+    st.header(
+        "💡 Why this decision?"
+    )
+
+    st.write(
+        f"**Recurring issue:** "
+        f"{'Yes' if recurring_issue else 'No'}"
+    )
+
+    st.write(
+        f"**Historical failed attempts:** "
+        f"{len(failed_attempts)}"
+    )
+
+    st.write(
+        f"**Previous escalations:** "
+        f"{len(previous_escalations)}"
+    )
+
+    st.write(
+        f"**Recommended team:** "
+        f"{recommended_team}"
+    )
+
+    st.write(
+        agent_result.get(
+            "reason",
+            "No additional reason was returned.",
         )
-        st.write(
-            f"**Historical failed attempts:** {len(failed_attempts)}"
-        )
-        st.write(
-            f"**Recommended team:** {recommended_team}"
-        )
-        st.write(
-            "ResolveIQ connected the current case with organizational "
-            "memory and avoided repeating ineffective troubleshooting."
-        )
-    else:
-        st.write(
-            "The recalled organizational memory does not indicate "
-            "a strong reason for escalation."
-        )
+    )
+
+
+    # ========================================================
+    # SUCCESSFUL RESOLUTIONS
+    # ========================================================
 
     if successful_resolutions:
-        st.header("✅ Previously Successful Resolutions")
+
+        st.header(
+            "✅ Previously Successful Resolutions"
+        )
+
         for resolution in successful_resolutions[:5]:
-            st.write(f"• {resolution}")
+
+            st.write(
+                f"• {resolution}"
+            )
+
+
+    # ========================================================
+    # SAVE NEW EXPERIENCE
+    # ========================================================
 
     st.divider()
-    st.header("🧠 Record Resolution")
+
+    st.header(
+        "🧠 Teach ResolveIQ What Happened"
+    )
+
     st.caption(
-        "Save the outcome so future cases can learn from this experience."
+        "The outcome becomes organizational experience "
+        "for future cases."
     )
 
     resolution = st.text_area(
         "What resolved the issue?",
-        value="Payment Operations fixed the payment gateway configuration.",
+        value=(
+            "Payment Operations fixed the payment gateway "
+            "configuration and successfully processed the transaction."
+        ),
         height=100,
         key="resolution_input",
     )
@@ -332,46 +525,71 @@ if st.session_state.get("analysis_complete", False):
         "🧠 Save Resolution to Hindsight",
         use_container_width=True,
     ):
-        customer_id_saved = st.session_state.get("customer_id", customer_id)
-        issue_saved = st.session_state.get("issue", issue)
-        description_saved = st.session_state.get("description", description)
+
+        customer_id_saved = st.session_state.get(
+            "customer_id",
+            customer_id,
+        )
+
+        issue_saved = st.session_state.get(
+            "issue",
+            issue,
+        )
+
+        description_saved = st.session_state.get(
+            "description",
+            description,
+        )
 
         memory = f"""
-Customer: {customer_id_saved}
+Customer ID: {customer_id_saved}
 
 Issue: {issue_saved}
 
-Description:
+Customer description:
 {description_saved}
 
 Resolution:
 {resolution}
 
-Lesson learned:
-Store this outcome as organizational memory so future similar cases
-can use the successful resolution instead of repeating failed troubleshooting.
+Organizational lesson:
+This case should be remembered so future similar cases
+can use the successful resolution and avoid repeating
+previously unsuccessful troubleshooting.
 """
 
-        with st.spinner("🧠 Saving resolution to Hindsight..."):
-            try:
-                save_memory(memory)
-                st.success(
-                    "🧠 Resolution saved successfully! "
-                    "ResolveIQ can now learn from this outcome."
-                )
-            except requests.exceptions.HTTPError as error:
-                status_code = (
-                    error.response.status_code
-                    if error.response is not None
-                    else "unknown"
-                )
-                st.error(f"Could not save memory (HTTP {status_code}).")
-            except Exception as error:
-                st.error(f"Could not save resolution: {error}")
+        with st.spinner(
+            "🧠 Retaining new organizational experience..."
+        ):
 
+            try:
+
+                save_memory(memory)
+
+                st.success(
+                    "✅ Experience retained in Hindsight."
+                )
+
+                st.info(
+                    "Run the same type of case again to "
+                    "demonstrate how ResolveIQ learns from it."
+                )
+
+            except Exception as error:
+
+                st.error(
+                    "Could not retain the new experience."
+                )
+
+                st.code(str(error))
+
+
+# ============================================================
+# FOOTER
+# ============================================================
 
 st.divider()
+
 st.caption(
-    "ResolveIQ · Remember → Recall → Decide → Resolve → Learn · "
-    "AI-powered escalation intelligence using Hindsight memory"
+    "ResolveIQ · Remember → Recall → Decide → Resolve → Learn"
 )
