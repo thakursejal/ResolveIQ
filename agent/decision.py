@@ -138,3 +138,75 @@ def analyze_escalation(ticket, historical_cases):
         "team": "Customer Support",
         "priority": "NORMAL"
     }
+    def analyze_hindsight_memories(ticket, memory_records):
+    """
+    Analyze Hindsight memory records for escalation signals.
+
+    This function intentionally relies on the memory text rather
+    than Hindsight's internal response structure.
+    """
+
+    if not memory_records:
+        return {
+            "memory_count": 0,
+            "recurring_issue": False,
+            "failed_attempts": [],
+            "previous_escalations": [],
+            "successful_resolutions": []
+        }
+
+    failed_attempts = []
+    previous_escalations = []
+    successful_resolutions = []
+
+    for memory in memory_records:
+
+        text = memory.get("text", "")
+
+        if not text:
+            continue
+
+        text_lower = text.lower()
+
+        # Identify failed troubleshooting
+        failure_keywords = [
+            "failed",
+            "failure",
+            "did not resolve",
+            "didn't resolve",
+            "unsuccessful",
+            "not resolved"
+        ]
+
+        if any(keyword in text_lower for keyword in failure_keywords):
+            failed_attempts.append(text)
+
+        # Identify previous escalation
+        escalation_keywords = [
+            "escalated",
+            "escalation",
+            "payment operations",
+            "support lead"
+        ]
+
+        if any(keyword in text_lower for keyword in escalation_keywords):
+            previous_escalations.append(text)
+
+        # Identify successful resolution
+        resolution_keywords = [
+            "resolved",
+            "resolution",
+            "fixed",
+            "successfully"
+        ]
+
+        if any(keyword in text_lower for keyword in resolution_keywords):
+            successful_resolutions.append(text)
+
+    return {
+        "memory_count": len(memory_records),
+        "recurring_issue": len(memory_records) >= 2,
+        "failed_attempts": failed_attempts,
+        "previous_escalations": previous_escalations,
+        "successful_resolutions": successful_resolutions
+            }
