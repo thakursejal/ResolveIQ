@@ -3,12 +3,11 @@ import textwrap
 import requests
 import streamlit as st
 from agent.agent_runner import run_agent_with_memory
-def render_html(markup):
+def render_html(markup, unsafe_allow_html=True):
     st.markdown(
         textwrap.dedent(markup),
-        unsafe_allow_html=True,
+        unsafe_allow_html=unsafe_allow_html,
     )
-
 
 # ============================================================
 # PAGE CONFIG
