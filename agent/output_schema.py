@@ -8,9 +8,10 @@ REQUIRED_OUTPUT_FIELDS = [
     "successful_resolutions",
     "escalation_action",
     "memory_count",
+    "recommendation",
+    "reason",
     "ai_reasoning",
 ]
-
 
 def validate_agent_output(result):
     """
