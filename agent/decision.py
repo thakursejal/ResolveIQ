@@ -114,29 +114,53 @@ def analyze_escalation(ticket, historical_cases):
         "recommendation": recommendation,
         "reason": reason
     }
-    def get_escalation_action(severity, recurring_issue, failed_attempts):
+   def get_escalation_action(
+    severity,
+    recurring_issue,
+    failed_attempts,
+    previous_escalations=None
+):
     """
-    Convert the analysis into a clear operational action.
+    Convert memory evidence into a clear operational action.
     """
 
+    if previous_escalations is None:
+        previous_escalations = []
+
+    # Repeated failures indicate that normal troubleshooting
+    # should stop and the issue should be escalated.
     if recurring_issue and len(failed_attempts) >= 2:
         return {
             "action": "ESCALATE",
             "team": "Payment Operations",
-            "priority": "HIGH"
+            "priority": "HIGH",
+            "reason": (
+                "Multiple unsuccessful troubleshooting attempts "
+                "were recalled from Hindsight."
+            )
         }
 
-    if severity == "high":
+    # If a previous escalation exists, involve a support lead
+    # when the current issue remains high severity.
+    if previous_escalations and severity == "high":
         return {
             "action": "REVIEW",
             "team": "Support Lead",
-            "priority": "HIGH"
+            "priority": "HIGH",
+            "reason": (
+                "A previous escalation was recalled and the "
+                "current issue remains high severity."
+            )
         }
 
     return {
         "action": "TROUBLESHOOT",
         "team": "Customer Support",
-        "priority": "NORMAL"
+        "priority": "NORMAL",
+        "reason": (
+            "There is not enough evidence of repeated failure "
+            "to justify escalation."
+        )
     }
     def analyze_hindsight_memories(ticket, memory_records):
     """
