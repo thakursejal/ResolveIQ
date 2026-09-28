@@ -3,7 +3,6 @@ import os
 from groq import Groq
 from dotenv import load_dotenv
 
-from .decision import analyze_escalation, get_escalation_action
 from .prompts import SYSTEM_PROMPT, build_agent_prompt
 
 from .memory_parser import (
@@ -64,26 +63,25 @@ agent_prompt = build_agent_prompt(
 
         ai_reasoning = response.choices[0].message.content
 
-        # Structured escalation decision
-        decision = analyze_escalation(
-            ticket,
-            historical_cases
-        )
+              return {
+            "agent": "ResolveIQ",
+            "status": "success",
+            "prompt_version": "v3",
+            "ai_reasoning": ai_reasoning
+              }
+       except Exception as error:
 
         return {
-    **decision,
-    "escalation_action": action,
-    "agent": "ResolveIQ",
-    "status": "success",
-    "prompt_version": "v3",
-    "ai_reasoning": ai_reasoning
-}
-   except Exception as error:
-    # Fallback to the rule-based decision engine
-    decision = analyze_escalation(
-        ticket,
-        historical_cases
-    )
+            "agent": "ResolveIQ",
+            "status": "fallback",
+            "prompt_version": "v3",
+            "ai_reasoning": (
+                "LLM unavailable. "
+                "ResolveIQ will rely on Hindsight memory "
+                "and its structured escalation logic."
+            ),
+            "error": str(error)
+        }
 
     action = get_escalation_action(
         decision["severity"],
