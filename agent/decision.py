@@ -1,155 +1,64 @@
-def _issue_is_similar(current_issue, historical_issue):
+def _issue_is_similar(ticket, memory_text):
     """
-    Check whether the current issue is related to a historical issue.
-    """
-
-    current_words = set(current_issue.lower().split())
-    historical_words = set(historical_issue.lower().split())
-
-    if not current_words or not historical_words:
-        return False
-
-    common_words = current_words.intersection(historical_words)
-
-    return len(common_words) >= 2
-
-
-def analyze_escalation(ticket, historical_cases):
-    """
-    Analyze a new support ticket against relevant historical cases.
+    Check whether a historical memory is related to the
+    current ticket.
     """
 
-    customer_id = ticket.get("customer_id")
-    current_issue = ticket.get("issue", "")
-    frustration = ticket.get("frustration", "medium").lower()
+    ticket_text = (
+        f"{ticket.get('issue', '')} "
+        f"{ticket.get('description', '')}"
+    ).lower()
 
-    relevant_cases = []
+    memory_text = memory_text.lower()
 
-    # Find historical cases related to the current issue
-    for case in historical_cases:
+    keywords = [
+        "payment",
+        "transaction",
+        "failed",
+        "failure",
+        "declined",
+        "gateway",
+        "refund",
+        "card",
+    ]
 
-        historical_issue = case.get("issue", "")
+    return any(
+        keyword in ticket_text and keyword in memory_text
+        for keyword in keywords
+    )
 
-        if _issue_is_similar(current_issue, historical_issue):
-            relevant_cases.append(case)
 
-    # No relevant history
-    if not relevant_cases:
-        return {
-            "severity": "medium",
-            "recurring_issue": False,
-            "previous_failed_attempts": [],
-            "successful_resolutions": [],
-            "recommendation": "Standard troubleshooting",
-            "reason": "No relevant historical cases were found."
-        }
-
-    failed_attempts = []
-    successful_resolutions = []
-
-    for case in relevant_cases:
-
-        result = case.get("result", "").lower()
-
-        if result == "failed":
-            failed_attempts.append(
-                case.get("attempted_solution", "Unknown")
-            )
-
-        elif result == "resolved":
-            successful_resolutions.append(
-                case.get("resolution", "Unknown")
-            )
-
-    recurring_issue = len(relevant_cases) >= 2
-
-    # Multiple relevant failures → escalation
-    if recurring_issue and len(failed_attempts) >= 2:
-
-        recommendation = "Escalate to Payment Operations"
-
-        reason = (
-            f"Customer {customer_id} has a recurring issue. "
-            f"Previous relevant troubleshooting attempts failed: "
-            f"{', '.join(failed_attempts)}."
-        )
-
-        severity = "high"
-
-    # A successful historical resolution exists
-    elif successful_resolutions:
-
-        recommendation = (
-            f"Try previously successful resolution: "
-            f"{successful_resolutions[-1]}"
-        )
-
-        reason = (
-            "A relevant historical case contains a successful "
-            "resolution that may apply to the current issue."
-        )
-
-        severity = "medium"
-
-    else:
-
-        recommendation = "Standard troubleshooting"
-
-        reason = (
-            "Relevant historical cases were found, but there is "
-            "not enough evidence to recommend escalation."
-        )
-
-        severity = "medium"
-
-    # High frustration increases severity
-    if frustration == "high" and recurring_issue:
-        severity = "high"
-
-    return {
-        "severity": severity,
-        "recurring_issue": recurring_issue,
-        "previous_failed_attempts": failed_attempts,
-        "successful_resolutions": successful_resolutions,
-        "recommendation": recommendation,
-        "reason": reason
-    }
-   def get_escalation_action(
+def analyze_escalation(
     severity,
     recurring_issue,
     failed_attempts,
     previous_escalations=None
 ):
     """
-    Convert memory evidence into a clear operational action.
+    Decide whether the current issue needs escalation.
     """
 
-    if previous_escalations is None:
-        previous_escalations = []
+    previous_escalations = previous_escalations or []
 
-    # Repeated failures indicate that normal troubleshooting
-    # should stop and the issue should be escalated.
     if recurring_issue and len(failed_attempts) >= 2:
         return {
             "action": "ESCALATE",
             "team": "Payment Operations",
             "priority": "HIGH",
             "reason": (
-                "Multiple unsuccessful troubleshooting attempts "
-                "were recalled from Hindsight."
+                "The issue is recurring and multiple "
+                "troubleshooting attempts have failed."
             )
         }
 
-    # If a previous escalation exists, involve a support lead
-    # when the current issue remains high severity.
-    if previous_escalations and severity == "high":
+    if previous_escalations and severity.lower() == "high":
         return {
             "action": "REVIEW",
             "team": "Support Lead",
             "priority": "HIGH",
             "reason": (
-                "A previous escalation was recalled and the "
-                "current issue remains high severity."
+                "A previous escalation exists and the "
+                "current issue has high severity."
             )
         }
 
@@ -158,16 +67,38 @@ def analyze_escalation(ticket, historical_cases):
         "team": "Customer Support",
         "priority": "NORMAL",
         "reason": (
-            "There is not enough evidence of repeated failure "
+            "There is not enough historical evidence "
             "to justify escalation."
         )
     }
-    def analyze_hindsight_memories(ticket, memory_records):
-    """
-    Analyze Hindsight memory records for escalation signals.
 
-    This function intentionally relies on the memory text rather
-    than Hindsight's internal response structure.
+
+def get_escalation_action(
+    severity,
+    recurring_issue,
+    failed_attempts,
+    previous_escalations=None
+):
+    """
+    Return the operational escalation decision.
+    """
+
+    return analyze_escalation(
+        severity=severity,
+        recurring_issue=recurring_issue,
+        failed_attempts=failed_attempts,
+        previous_escalations=previous_escalations
+    )
+
+
+def analyze_hindsight_memories(ticket, memory_records):
+    """
+    Analyze historical Hindsight memories to identify:
+
+    - recurring issues
+    - failed attempts
+    - previous escalations
+    - successful resolutions
     """
 
     if not memory_records:
@@ -185,6 +116,9 @@ def analyze_escalation(ticket, historical_cases):
 
     for memory in memory_records:
 
+        if not isinstance(memory, dict):
+            continue
+
         text = memory.get("text", "")
 
         if not text:
@@ -192,7 +126,7 @@ def analyze_escalation(ticket, historical_cases):
 
         text_lower = text.lower()
 
-        # Identify failed troubleshooting
+        # Detect failed troubleshooting attempts
         failure_keywords = [
             "failed",
             "failure",
@@ -202,29 +136,32 @@ def analyze_escalation(ticket, historical_cases):
             "not resolved"
         ]
 
-        if any(keyword in text_lower for keyword in failure_keywords):
+        sentences = [
+            sentence.strip()
+            for sentence in (
+                text
+                .replace("!", ".")
+                .replace("?", ".")
+                .split(".")
+            )
+            if sentence.strip()
+        ]
 
-    sentences = [
-        sentence.strip()
-        for sentence in text.replace("!", ".").replace("?", ".").split(".")
-        if sentence.strip()
-    ]
+        matched_failures = [
+            sentence
+            for sentence in sentences
+            if any(
+                keyword in sentence.lower()
+                for keyword in failure_keywords
+            )
+        ]
 
-    matched_failures = [
-        sentence
-        for sentence in sentences
-        if any(
-            keyword in sentence.lower()
-            for keyword in failure_keywords
-        )
-    ]
+        if matched_failures:
+            failed_attempts.extend(
+                matched_failures
+            )
 
-    if matched_failures:
-        failed_attempts.extend(matched_failures)
-    else:
-        failed_attempts.append(text)
-
-        # Identify previous escalation
+        # Detect previous escalations
         escalation_keywords = [
             "escalated",
             "escalation",
@@ -232,10 +169,13 @@ def analyze_escalation(ticket, historical_cases):
             "support lead"
         ]
 
-        if any(keyword in text_lower for keyword in escalation_keywords):
+        if any(
+            keyword in text_lower
+            for keyword in escalation_keywords
+        ):
             previous_escalations.append(text)
 
-        # Identify successful resolution
+        # Detect successful resolutions
         resolution_keywords = [
             "resolved",
             "resolution",
@@ -243,17 +183,20 @@ def analyze_escalation(ticket, historical_cases):
             "successfully"
         ]
 
-        if any(keyword in text_lower for keyword in resolution_keywords):
+        if any(
+            keyword in text_lower
+            for keyword in resolution_keywords
+        ):
             successful_resolutions.append(text)
 
     return {
         "memory_count": len(memory_records),
         "recurring_issue": (
-    len(failed_attempts) >= 2
-    or len(previous_escalations) >= 1
-    or len(memory_records) >= 2
-),
+            len(failed_attempts) >= 2
+            or len(previous_escalations) >= 1
+            or len(memory_records) >= 2
+        ),
         "failed_attempts": failed_attempts,
         "previous_escalations": previous_escalations,
         "successful_resolutions": successful_resolutions
-            }
+    }
