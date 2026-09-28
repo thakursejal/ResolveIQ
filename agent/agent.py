@@ -5,10 +5,7 @@ from dotenv import load_dotenv
 
 from .prompts import SYSTEM_PROMPT, build_agent_prompt
 
-from .memory_parser import (
-    prepare_historical_context,
-    format_historical_context
-)
+from .memory_parser import format_historical_context
 
 
 load_dotenv()
@@ -20,12 +17,8 @@ def run_agent(ticket, historical_cases):
     """
 
     # Build context from current ticket and historical memory
-    historical_context = prepare_historical_context(
+  formatted_context = format_historical_context(
     historical_cases
-)
-
-formatted_context = format_historical_context(
-    historical_context
 )
 
 agent_prompt = build_agent_prompt(
