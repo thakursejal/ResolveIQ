@@ -1,7 +1,7 @@
 import os
 import streamlit as st
 
-from hindsight import HindsightEmbedded
+from hindsight import HindsightServer, HindsightClient
 
 from agent.agent_runner import run_agent_with_memory
 
