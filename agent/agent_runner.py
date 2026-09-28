@@ -67,18 +67,18 @@ def run_agent_with_memory(ticket, recall_historical_cases):
     )
 
     # 7. Build a consistent recommendation
-    if action["action"] == "ESCALATE":
+  if action["action"] == "ESCALATE":
 
-        recommendation = (
-            f"Escalate to {action['team']}"
-        )
+    recommendation = (
+        f"Escalate to {action['team']}"
+    )
 
-        reason = (
-            "Hindsight recalled a recurring issue with "
-            "multiple unsuccessful troubleshooting attempts. "
-            "Repeating the same troubleshooting is therefore "
-            "not recommended."
-        )
+    reason = (
+        "Hindsight recalled a recurring issue with "
+        f"{len(memory_analysis['failed_attempts'])} "
+        "unsuccessful troubleshooting attempts. "
+        "Repeating the same failed approach is not recommended."
+    )
 
     elif memory_analysis["successful_resolutions"]:
 
