@@ -1,8 +1,13 @@
 import os
+import textwrap
 import requests
 import streamlit as st
-
 from agent.agent_runner import run_agent_with_memory
+def render_html(markup):
+    st.markdown(
+        textwrap.dedent(markup),
+        unsafe_allow_html=True,
+    )
 
 
 # ============================================================
@@ -135,7 +140,7 @@ def save_memory(memory):
 # CUSTOM STYLING
 # ============================================================
 
-st.markdown(
+render_html(
     """
     <style>
 
@@ -399,7 +404,7 @@ st.markdown(
 # HERO
 # ============================================================
 
-st.markdown(
+render_html(
     """
     <div class="hero">
 
@@ -427,7 +432,7 @@ st.markdown(
 
 if HINDSIGHT_API_KEY:
 
-    st.markdown(
+    render_html(
         """
         <div class="status-card">
 
@@ -455,7 +460,7 @@ else:
 # CASE INPUT
 # ============================================================
 
-st.markdown(
+render_html(
     '<div class="section-title">🎫 Customer Escalation</div>',
     unsafe_allow_html=True,
 )
@@ -778,7 +783,7 @@ if st.session_state.get(
 
     st.divider()
 
-    st.markdown(
+    render_html(
         '<div class="section-title">📊 Case Analysis</div>',
         unsafe_allow_html=True,
     )
@@ -828,7 +833,7 @@ if st.session_state.get(
     # RECOMMENDATION
     # ========================================================
 
-    st.markdown(
+    render_html(
         '<div class="section-title">🚨 ResolveIQ Recommendation</div>',
         unsafe_allow_html=True,
     )
@@ -836,7 +841,7 @@ if st.session_state.get(
 
     if escalate:
 
-        st.markdown(
+        render_html(
             f"""
             <div class="danger-card">
 
@@ -860,7 +865,7 @@ if st.session_state.get(
 
         with team_col:
 
-            st.markdown(
+            render_html(
                 f"""
                 <div class="result-card">
 
@@ -880,7 +885,7 @@ if st.session_state.get(
 
         with signal_col:
 
-            st.markdown(
+            render_html(
                 """
                 <div class="result-card">
 
@@ -909,7 +914,7 @@ if st.session_state.get(
 
     else:
 
-        st.markdown(
+        render_html(
             """
             <div class="success-card">
 
@@ -934,7 +939,7 @@ if st.session_state.get(
 
     st.divider()
 
-    st.markdown(
+    render_html(
         '<div class="section-title">🧠 What ResolveIQ Remembered</div>',
         unsafe_allow_html=True,
     )
@@ -967,7 +972,7 @@ if st.session_state.get(
 
     st.divider()
 
-    st.markdown(
+    render_html(
         '<div class="section-title">🤖 AI Agent Reasoning</div>',
         unsafe_allow_html=True,
     )
@@ -979,7 +984,7 @@ if st.session_state.get(
     )
 
 
-    st.markdown(
+    render_html(
         f"""
         <div class="result-card">
 
@@ -1003,7 +1008,7 @@ if st.session_state.get(
     )
 
 
-    st.markdown(
+    render_html(
         '<div class="section-title">📚 Learning Signal</div>',
         unsafe_allow_html=True,
     )
@@ -1020,7 +1025,7 @@ if st.session_state.get(
 
     st.divider()
 
-    st.markdown(
+    render_html(
         '<div class="section-title">💡 Why this decision?</div>',
         unsafe_allow_html=True,
     )
@@ -1028,7 +1033,7 @@ if st.session_state.get(
 
     if escalate:
 
-        st.markdown(
+        render_html(
             f"""
             <div class="result-card">
 
@@ -1074,7 +1079,7 @@ if st.session_state.get(
 
     st.divider()
 
-    st.markdown(
+    render_html(
         '<div class="section-title">✅ Record Resolution</div>',
         unsafe_allow_html=True,
     )
@@ -1175,7 +1180,7 @@ of repeating failed troubleshooting.
 # FOOTER
 # ============================================================
 
-st.markdown(
+render_html(
     """
     <div class="footer">
 
